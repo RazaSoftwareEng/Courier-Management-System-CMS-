@@ -1,0 +1,100 @@
+<!--
+  Supabase > Authentication > Emails > "Confirm signup"
+  Subject: Confirm your CourierPro account
+  Is file ka poora content "Message body" (Source) mein paste karein.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirm your CourierPro account</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f1f5f9; font-family:Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+    <span style="display:none; max-height:0; overflow:hidden; opacity:0;">Verify your email to activate your CourierPro company account.</span>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;">
+            <!-- Logo -->
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="background-color:#4f46e5; border-radius:12px; padding:10px 14px; color:#ffffff; font-size:20px; font-weight:700; letter-spacing:0.3px;">
+                      &#128666;&nbsp;CourierPro
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td style="background-color:#ffffff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="background-color:#4f46e5; height:6px; line-height:6px; font-size:0;">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:40px 40px 8px 40px;">
+                      <h1 style="margin:0 0 12px 0; font-size:22px; line-height:30px; color:#0f172a; font-weight:700;">Verify your email address</h1>
+                      <p style="margin:0 0 16px 0; font-size:15px; line-height:24px; color:#475569;">
+                        Welcome to <strong style="color:#0f172a;">CourierPro</strong>. Your company account has been created for
+                        <strong style="color:#0f172a;">{{ .Email }}</strong>.
+                      </p>
+                      <p style="margin:0 0 28px 0; font-size:15px; line-height:24px; color:#475569;">
+                        Please confirm your email address to activate your account. Once verified, you can book parcels, track deliveries and request payouts.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:0 40px 32px 40px;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td align="center" style="border-radius:10px; background-color:#4f46e5;">
+                            <a href="{{ .ConfirmationURL }}" target="_blank"
+                               style="display:inline-block; padding:14px 36px; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:10px;">
+                              Verify Email Address
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 40px 32px 40px;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc; border-radius:10px;">
+                        <tr>
+                          <td style="padding:16px 20px; font-size:13px; line-height:20px; color:#64748b;">
+                            Button kaam na kare to ye link browser mein paste karein:<br />
+                            <a href="{{ .ConfirmationURL }}" style="color:#4f46e5; word-break:break-all;">{{ .ConfirmationURL }}</a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 40px 40px 40px; border-top:1px solid #e2e8f0;">
+                      <p style="margin:24px 0 0 0; font-size:13px; line-height:20px; color:#94a3b8;">
+                        Agar aapne ye account nahi banaya to is email ko ignore kar dein. Aapka account verify nahi hoga.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="padding:24px 16px 0 16px; font-size:12px; line-height:18px; color:#94a3b8;">
+                &copy; CourierPro &middot; Courier Company Management System<br />
+                This is an automated message, please do not reply.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
