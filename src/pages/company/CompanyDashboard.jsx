@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Package, Clock, Truck, CheckCircle2, Undo2, XCircle, Banknote, Wallet, HandCoins, Landmark, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
+import { ACTIVE_STATUSES } from '../../data/constants'
 import { StatCard, PageHeader, Section, StatusBadge } from '../../components/ui'
 import { ParcelsBarChart, RevenueAreaChart, StatusDonut } from '../../components/Charts'
 import { money, countBy, monthlySeries, companyLedger, byId } from '../../lib/utils'
@@ -20,7 +21,8 @@ export default function CompanyDashboard() {
 
   const finished = (counts.Delivered || 0) + (counts.Returned || 0)
   const successRate = finished ? Math.round(((counts.Delivered || 0) / finished) * 100) : 0
-  const inTransit = (counts.Picked || 0) + (counts['In Transit'] || 0) + (counts['Out for Delivery'] || 0)
+  // Booked ke baad aur Delivered/Returned se pehle sab raste mein
+  const inTransit = ACTIVE_STATUSES.filter((s) => s !== 'Booked').reduce((t, s) => t + (counts[s] || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -40,7 +42,7 @@ export default function CompanyDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-6">
         <StatCard label="Total Parcels" value={own.length} icon={Package} />
         <StatCard label="Booked" value={counts.Booked || 0} icon={Clock} tone="slate" />
         <StatCard label="In Transit" value={inTransit} icon={Truck} tone="sky" />
@@ -49,7 +51,7 @@ export default function CompanyDashboard() {
         <StatCard label="Cancelled" value={counts.Cancelled || 0} icon={XCircle} tone="rose" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total COD (Delivered)" value={money(ledger.totalCod)} icon={Banknote} />
         <StatCard label="Paid to You" value={money(ledger.paid)} icon={Wallet} tone="emerald" />
         <StatCard label="Pending Requests" value={money(ledger.pending)} icon={HandCoins} tone="amber" />

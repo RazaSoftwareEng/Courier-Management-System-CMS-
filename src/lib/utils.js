@@ -75,3 +75,49 @@ export function downloadCsv(filename, columns, rows) {
   a.click()
   URL.revokeObjectURL(a.href)
 }
+
+// ---------- Rider ka roz ka hisaab (tracking history se) ----------
+
+const sameDay = (iso, day) => new Date(iso).toDateString() === day.toDateString()
+
+// Us din parcel par ye status laga tha?
+const hadEventOn = (parcel, status, day) => (parcel.history || []).some((h) => h.status === status && sameDay(h.at, day))
+
+// riderId diya ho to pickup sirf us rider ke (pickup_rider_id) aur delivery sirf us ke (rider_id) gine jate hain
+export function riderDayStats(parcels, day = new Date(), riderId) {
+  const isPickup = (p) => !riderId || p.pickup_rider_id === riderId
+  const isDelivery = (p) => !riderId || p.rider_id === riderId
+  const picked = parcels.filter((p) => isPickup(p) && hadEventOn(p, 'Picked', day))
+  const delivered = parcels.filter((p) => isDelivery(p) && hadEventOn(p, 'Delivered', day))
+  const returned = parcels.filter((p) => isDelivery(p) && hadEventOn(p, 'Returned', day))
+  const assigned = parcels.filter((p) => (p.history || []).some((h) => /rider assigned/i.test(h.note || '') && sameDay(h.at, day)))
+  const touched = parcels.filter((p) => (p.history || []).some((h) => sameDay(h.at, day)))
+  return {
+    assigned,
+    picked,
+    delivered,
+    returned,
+    touched,
+    // Delivered parcels ka COD rider ke paas cash hai
+    cashCollected: sum(delivered, 'cod_amount'),
+  }
+}
+
+export function riderWeekSeries(parcels, riderId, days = 7) {
+  const out = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const s = riderDayStats(parcels, d, riderId)
+    out.push({
+      month: d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit' }),
+      parcels: s.picked.length,
+      delivered: s.delivered.length,
+      cod: s.cashCollected,
+    })
+  }
+  return out
+}
+
+// Har role ka home page
+export const homeFor = (role) => ({ admin: '/admin', company: '/company', rider: '/rider' })[role] || '/login'

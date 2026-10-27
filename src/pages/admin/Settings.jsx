@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import { money } from '../../lib/utils'
+import { LIMITS } from '../../lib/validation'
 import EntityForm from '../../components/EntityForm'
 import { Modal, ConfirmDialog, PageHeader, Section, IconButton } from '../../components/ui'
 
 const rateFields = [
-  { name: 'city', label: 'City', required: true },
-  { name: 'base_charge', label: 'Base Charge (Rs)', type: 'number', required: true, min: 0 },
-  { name: 'per_kg', label: 'Per Kg (Rs)', type: 'number', required: true, min: 0 },
+  { name: 'city', label: 'City', required: true, rule: 'city' },
+  { name: 'base_charge', label: 'Base Charge (Rs)', type: 'number', required: true, ...LIMITS.charges },
+  { name: 'per_kg', label: 'Per Kg (Rs)', type: 'number', required: true, ...LIMITS.charges },
 ]
 
 export default function Settings() {
@@ -25,9 +26,14 @@ export default function Settings() {
           <EntityForm
             key={JSON.stringify(settings)}
             fields={[
-              { name: 'system_name', label: 'System Name', required: true },
-              { name: 'support_phone', label: 'Support Phone' },
-              { name: 'commission_percent', label: 'Commission on COD (%)', type: 'number', min: 0 },
+              { name: 'system_name', label: 'System Name', required: true, rule: 'name' },
+              { name: 'support_phone', label: 'Support Phone', rule: 'phone' },
+              { name: 'commission_percent', label: 'Commission on COD (%)', type: 'number', required: true, ...LIMITS.commission },
+              { name: 'hub_city', label: 'Head Office City', required: true, rule: 'city' },
+              { name: 'domestic_base_charge', label: 'Dusre shehar: Base (Rs)', type: 'number', required: true, ...LIMITS.charges },
+              { name: 'domestic_per_kg', label: 'Dusre shehar: Per Kg (Rs)', type: 'number', required: true, ...LIMITS.charges },
+              { name: 'intl_base_charge', label: 'International: Base (Rs)', type: 'number', required: true, ...LIMITS.charges },
+              { name: 'intl_per_kg', label: 'International: Per Kg (Rs)', type: 'number', required: true, ...LIMITS.charges },
             ]}
             initial={settings}
             submitLabel="Save Settings"

@@ -10,9 +10,9 @@ export const BANKS = ['Meezan Bank', 'HBL', 'UBL', 'MCB Bank', 'Allied Bank', 'B
 
 export const bankFields = [
   { name: 'bank_name', label: 'Bank Name', type: 'select', options: BANKS, required: true },
-  { name: 'account_title', label: 'Account Title', required: true },
-  { name: 'account_no', label: 'Account Number', required: true },
-  { name: 'iban', label: 'IBAN', required: true, placeholder: 'PK00XXXX0000000000000000' },
+  { name: 'account_title', label: 'Account Title', required: true, rule: 'name' },
+  { name: 'account_no', label: 'Account Number', required: true, rule: 'accountNo' },
+  { name: 'iban', label: 'IBAN', required: true, rule: 'iban' },
 ]
 
 export default function BankAccounts() {

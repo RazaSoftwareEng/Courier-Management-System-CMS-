@@ -8,13 +8,13 @@ import EntityForm from '../../components/EntityForm'
 import { Modal, ConfirmDialog, PageHeader, IconButton, StatusBadge } from '../../components/ui'
 
 const fields = [
-  { name: 'name', label: 'Company Name', required: true },
-  { name: 'owner_name', label: 'Owner Name', required: true },
-  { name: 'email', label: 'Email', type: 'email', required: true },
-  { name: 'phone', label: 'Phone', required: true },
+  { name: 'name', label: 'Company Name', required: true, rule: 'name' },
+  { name: 'owner_name', label: 'Owner Name', required: true, rule: 'personName' },
+  { name: 'email', label: 'Email', type: 'email', required: true, rule: 'email' },
+  { name: 'phone', label: 'Phone', required: true, rule: 'phone' },
   { name: 'city', label: 'City', type: 'select', options: CITIES, required: true },
   { name: 'status', label: 'Status', type: 'select', options: COMPANY_STATUSES, required: true, default: 'Active' },
-  { name: 'address', label: 'Address', type: 'textarea' },
+  { name: 'address', label: 'Address', type: 'textarea', rule: 'address' },
 ]
 
 // Sirf nayi company par: isi email + password se company login karegi
@@ -22,7 +22,7 @@ const passwordField = { name: 'password', label: 'Login Password (kam az kam 6 c
 
 export default function Companies() {
   const store = useStore()
-  const { companies, parcels, customers, bank_accounts, add, update, removeCompany, createCompanyLogin, notify } = store
+  const { companies, parcels, customers, bank_accounts, add, update, removeCompany, createLogin, notify } = store
   const [form, setForm] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [deleting, setDeleting] = useState(null)
@@ -106,7 +106,7 @@ export default function Companies() {
                 const company = await add('companies', v)
                 if (!company) return
                 // Company pehle bani, phir login: profile trigger email se link kar deta hai
-                if (password && (await createCompanyLogin(v.email, password, v.owner_name))) {
+                if (password && (await createLogin(v.email, password, v.owner_name))) {
                   notify('Company aur uska login ban gaya')
                 } else {
                   notify('Company add ho gayi, lekin login nahi bana', 'error')

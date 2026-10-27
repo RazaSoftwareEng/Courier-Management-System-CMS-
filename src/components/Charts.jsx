@@ -7,14 +7,16 @@ const tooltipStyle = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 1
 export const STATUS_COLORS = {
   Booked: '#94a3b8',
   Picked: '#38bdf8',
+  'At Head Office': '#8b5cf6',
   'In Transit': '#6366f1',
+  'Arrived at Destination': '#06b6d4',
   'Out for Delivery': '#f59e0b',
   Delivered: '#10b981',
   Returned: '#f97316',
   Cancelled: '#f43f5e',
 }
 
-export function ParcelsBarChart({ data }) {
+export function ParcelsBarChart({ data, labels = { parcels: 'Booked', delivered: 'Delivered' } }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
@@ -23,8 +25,8 @@ export function ParcelsBarChart({ data }) {
         <YAxis tick={axis} axisLine={false} tickLine={false} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f8fafc' }} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="parcels" name="Booked" fill="#6366f1" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="delivered" name="Delivered" fill="#10b981" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="parcels" name={labels.parcels} fill="#6366f1" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="delivered" name={labels.delivered} fill="#10b981" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

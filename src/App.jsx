@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, Building2, Users, Package, HandCoins, Wallet, Landmark, Settings as SettingsIcon, UserCircle, Loader2 } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Package, HandCoins, Wallet, Landmark, Settings as SettingsIcon, UserCircle, Loader2, Bike, ClipboardList } from 'lucide-react'
 import { useStore } from './store/StoreContext'
 import { supabaseConfigured } from './lib/supabase'
+import { homeFor } from './lib/utils'
 import DashboardLayout from './layouts/DashboardLayout'
 import Login from './pages/Login'
 import ParcelsPage from './components/ParcelsPage'
@@ -12,10 +13,15 @@ import PaymentRequests from './pages/admin/PaymentRequests'
 import Payments from './pages/admin/Payments'
 import BankAccounts from './pages/admin/BankAccounts'
 import Settings from './pages/admin/Settings'
+import Riders from './pages/admin/Riders'
+import RiderDashboard from './pages/rider/RiderDashboard'
+import RiderParcels from './pages/rider/RiderParcels'
+import RiderReport from './pages/rider/RiderReport'
 import CompanyDashboard from './pages/company/CompanyDashboard'
 import CompanyBank from './pages/company/CompanyBank'
 import CompanyPaymentRequests from './pages/company/CompanyPaymentRequests'
 import CompanyProfile from './pages/company/CompanyProfile'
+
 
 function RequireRole({ role, children }) {
   const { session } = useStore()
@@ -61,6 +67,7 @@ export default function App() {
     { to: '/admin/parcels', label: 'Parcels', icon: Package },
     { to: '/admin/payment-requests', label: 'Payment Requests', icon: HandCoins, badge: pendingCount },
     { to: '/admin/payments', label: 'Payments', icon: Wallet },
+    { to: '/admin/riders', label: 'Riders', icon: Bike },
     { to: '/admin/banks', label: 'Bank Accounts', icon: Landmark },
     { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
   ]
@@ -74,9 +81,15 @@ export default function App() {
     { to: '/company/profile', label: 'Profile', icon: UserCircle },
   ]
 
+  const riderNav = [
+    { to: '/rider', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/rider/parcels', label: 'My Parcels', icon: Package },
+    { to: '/rider/report', label: 'Daily Report', icon: ClipboardList },
+  ]
+
   return (
     <Routes>
-      <Route path="/login" element={session ? <Navigate to={session.role === 'admin' ? '/admin' : '/company'} replace /> : <Login />} />
+      <Route path="/login" element={session ? <Navigate to={homeFor(session.role)} replace /> : <Login />} />
 
       <Route
         path="/admin"
@@ -92,6 +105,7 @@ export default function App() {
         <Route path="parcels" element={<ParcelsPage />} />
         <Route path="payment-requests" element={<PaymentRequests />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="riders" element={<Riders />} />
         <Route path="banks" element={<BankAccounts />} />
         <Route path="settings" element={<Settings />} />
       </Route>
@@ -112,7 +126,20 @@ export default function App() {
         <Route path="profile" element={<CompanyProfile />} />
       </Route>
 
-      <Route path="*" element={<Navigate to={session ? (session.role === 'admin' ? '/admin' : '/company') : '/login'} replace />} />
+      <Route
+        path="/rider"
+        element={
+          <RequireRole role="rider">
+            <DashboardLayout nav={riderNav} title="Rider Panel" userName={session?.name} userRole="Rider" />
+          </RequireRole>
+        }
+      >
+        <Route index element={<RiderDashboard />} />
+        <Route path="parcels" element={<RiderParcels />} />
+        <Route path="report" element={<RiderReport />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to={session ? homeFor(session.role) : '/login'} replace />} />
     </Routes>
   )
 }

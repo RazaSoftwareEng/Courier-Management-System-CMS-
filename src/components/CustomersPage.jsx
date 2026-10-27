@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
-import { CITIES } from '../data/constants'
+import { CITIES, COUNTRIES } from '../data/constants'
 import { date, byId, countBy } from '../lib/utils'
 import DataTable from './DataTable'
 import EntityForm from './EntityForm'
@@ -18,17 +18,18 @@ export default function CustomersPage({ companyId }) {
 
   const fields = [
     ...(!companyId ? [{ name: 'company_id', label: 'Company', type: 'select', required: true, options: companies.map((c) => ({ value: c.id, label: c.name })) }] : []),
-    { name: 'name', label: 'Name', required: true },
-    { name: 'phone', label: 'Phone', required: true },
-    { name: 'city', label: 'City', type: 'select', required: true, options: CITIES },
-    { name: 'address', label: 'Address', type: 'textarea', required: true },
+    { name: 'name', label: 'Name', required: true, rule: 'personName' },
+    { name: 'phone', label: 'Phone', required: true, rule: 'phone' },
+    { name: 'country', label: 'Country', required: true, rule: 'city', default: 'Pakistan', suggestions: COUNTRIES },
+    { name: 'city', label: 'City', required: true, rule: 'city', suggestions: CITIES },
+    { name: 'address', label: 'Address', type: 'textarea', required: true, rule: 'address' },
   ]
 
   const columns = [
     { key: 'name', label: 'Name', render: (c) => <span className="font-medium text-slate-800">{c.name}</span> },
     { key: 'phone', label: 'Phone' },
     ...(!companyId ? [{ key: 'company', label: 'Company', render: (c) => companyMap[c.company_id]?.name || '-', csv: (c) => companyMap[c.company_id]?.name }] : []),
-    { key: 'city', label: 'City' },
+    { key: 'city', label: 'City', render: (c) => (c.country && c.country !== 'Pakistan' ? `${c.city}, ${c.country}` : c.city) },
     { key: 'address', label: 'Address', render: (c) => <span className="block max-w-56 truncate">{c.address}</span> },
     { key: 'parcels', label: 'Parcels', align: 'right', render: (c) => parcelCount[c.id] || 0, csv: (c) => parcelCount[c.id] || 0 },
     { key: 'created_at', label: 'Added', render: (c) => date(c.created_at), csv: (c) => date(c.created_at) },
@@ -56,7 +57,7 @@ export default function CustomersPage({ companyId }) {
         columns={columns}
         rows={rows}
         exportName="customers"
-        searchKeys={['name', 'phone', 'city', 'address', (c) => companyMap[c.company_id]?.name]}
+        searchKeys={['name', 'phone', 'city', 'country', 'address', (c) => companyMap[c.company_id]?.name]}
         filters={[
           ...(!companyId ? [{ key: 'company_id', label: 'Company', options: companies.map((c) => ({ value: c.id, label: c.name })) }] : []),
           { key: 'city', label: 'City', options: CITIES },

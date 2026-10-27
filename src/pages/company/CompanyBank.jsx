@@ -52,8 +52,8 @@ export default function CompanyBank() {
               </div>
               <Landmark size={28} className="text-indigo-200" />
             </div>
-            <p className="mt-6 font-mono text-lg tracking-widest">{bank.iban}</p>
-            <div className="mt-4 flex justify-between text-sm">
+            <p className="mt-6 break-all font-mono text-base tracking-wider sm:text-lg sm:tracking-widest">{bank.iban}</p>
+            <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm">
               <div>
                 <p className="text-indigo-200">Account Title</p>
                 <p className="font-medium">{bank.account_title}</p>
@@ -64,7 +64,7 @@ export default function CompanyBank() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <StatusBadge status={bank.verified ? 'Verified' : 'Unverified'} />
             <div className="flex gap-2">
               <button className="btn-secondary" onClick={() => setEditing(true)}>

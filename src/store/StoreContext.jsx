@@ -4,7 +4,7 @@ import { supabase, signupClient, setRememberSession } from '../lib/supabase'
 // Saara data Supabase se aata hai. RLS ki wajah se company ko sirf apna data milta hai,
 // admin ko sab kuch. Pages isi context ke add/update/remove use karte hain.
 
-const TABLES = ['companies', 'customers', 'parcels', 'bank_accounts', 'payment_requests', 'payments', 'rates']
+const TABLES = ['companies', 'customers', 'parcels', 'bank_accounts', 'payment_requests', 'payments', 'rates', 'riders']
 const SELECT = { parcels: '*, parcel_history(status, note, created_at)' }
 const DEFAULT_SETTINGS = { system_name: 'CourierPro', support_phone: '', commission_percent: 0 }
 
@@ -23,7 +23,24 @@ const friendly = (error) => {
   const msg = error?.message || 'Kuch ghalat ho gaya'
   if (msg.includes('Invalid login credentials')) return 'Email ya password ghalat hai'
   if (msg.includes('Email not confirmed')) return 'Email abhi confirm nahi hui'
+  if (msg.includes('riders_cnic_key')) return 'Is CNIC ka rider pehle se maujood hai'
+  if (msg.includes('riders_phone_key')) return 'Is phone number ka rider pehle se maujood hai'
   if (msg.includes('duplicate key')) return 'Ye record pehle se maujood hai'
+  if (msg.includes('violates check constraint')) {
+    // 004_validation.sql ke constraint names se
+    const checks = {
+      phone_fmt: 'Phone 03XXXXXXXXX format mein hona chahiye',
+      cnic_fmt: 'CNIC 35202-1234567-1 format mein hona chahiye',
+      vehicle_fmt: 'Bike number LEA-1234 format mein hona chahiye',
+      iban_fmt: 'IBAN sahi nahi (PK + 22 characters)',
+      account_fmt: 'Account number 8 se 20 digits ka hona chahiye',
+      email_fmt: 'Email sahi nahi',
+      _len: 'Koi field bohat lambi ya bohat chhoti hai',
+      _max: 'Value had se zyada hai',
+    }
+    const hit = Object.keys(checks).find((k) => msg.includes(k))
+    return hit ? checks[hit] : 'Kuch fields ka format sahi nahi'
+  }
   if (msg.includes('violates foreign key')) return 'Is record se dusra data juda hua hai, pehle woh delete karein'
   if (msg.includes('row-level security') || msg.includes('0 rows') || msg.includes('coerce the result')) return 'Aapko is kaam ki ijazat nahi'
   return msg
@@ -60,13 +77,15 @@ export function StoreProvider({ children }) {
   }
 
   const loadAll = useCallback(async () => {
-    try {
-      const results = await Promise.all(TABLES.map(fetchTable))
-      const { data: settings } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle()
-      setData({ ...Object.fromEntries(TABLES.map((t, i) => [t, results[i]])), settings: settings || DEFAULT_SETTINGS })
-    } catch (e) {
-      fail(e)
-    }
+    // Ek table fail ho (e.g. migration abhi nahi chali) to baqi data phir bhi load ho
+    const results = await Promise.allSettled(TABLES.map(fetchTable))
+    const failed = results.find((r) => r.status === 'rejected')
+    if (failed) fail(failed.reason)
+    const { data: settings } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle()
+    setData({
+      ...Object.fromEntries(TABLES.map((t, i) => [t, results[i].status === 'fulfilled' ? results[i].value : []])),
+      settings: settings || DEFAULT_SETTINGS,
+    })
   }, [fail])
 
   const reload = useCallback(
@@ -96,11 +115,19 @@ export function StoreProvider({ children }) {
         if (!company) return { error: 'Aapka account active nahi hai (Pending/Suspended). Admin se rabta karein.' }
         companyName = company.owner_name
       }
+      if (profile.role === 'rider') {
+        if (!profile.rider_id) return { error: 'Ye account kisi rider se link nahi hai. Admin se rabta karein.' }
+        const { data: rider } = await supabase.from('riders').select('name').eq('id', profile.rider_id).maybeSingle()
+        // my_rider_id() sirf Active rider deta hai
+        if (!rider) return { error: 'Aapka rider account active nahi hai. Admin se rabta karein.' }
+        companyName = rider.name
+      }
 
       await loadAll()
       const s = {
         role: profile.role,
         company_id: profile.company_id,
+        rider_id: profile.rider_id,
         email: profile.email,
         name: profile.full_name || companyName || profile.email,
       }
@@ -133,7 +160,7 @@ export function StoreProvider({ children }) {
     const pending = new Set()
     let timer
     const channel = supabase.channel('db-changes')
-    ;['parcels', 'parcel_history', 'payment_requests', 'payments', 'bank_accounts', 'companies'].forEach((table) => {
+    ;['parcels', 'parcel_history', 'payment_requests', 'payments', 'bank_accounts', 'companies', 'riders'].forEach((table) => {
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
         pending.add(table === 'parcel_history' ? 'parcels' : table)
         clearTimeout(timer)
@@ -209,8 +236,8 @@ export function StoreProvider({ children }) {
     [remove, loadAll]
   )
 
-  // Company ka login account (Supabase Auth user). Profile trigger email se company link kar deta hai.
-  const createCompanyLogin = useCallback(
+  // Company / rider ka login account (Supabase Auth user). Profile trigger email se company ya rider link kar deta hai.
+  const createLogin = useCallback(
     async (email, password, fullName) => {
       // Verification email ka link company ko login page par wapis laata hai
       const { error } = await signupClient.auth.signUp({
@@ -224,16 +251,48 @@ export function StoreProvider({ children }) {
     [fail]
   )
 
-  const updateParcelStatus = useCallback(
-    async (parcelId, status, note) => {
-      const { error } = await supabase.rpc('update_parcel_status', { p_parcel_id: parcelId, p_status: status, p_note: note || null })
+  const refetchParcel = useCallback(
+    async (parcelId) => {
+      const { data: row, error } = await supabase.from('parcels').select(SELECT.parcels).eq('id', parcelId).single()
       if (error) return fail(error)
-      const { data: row, error: e2 } = await supabase.from('parcels').select(SELECT.parcels).eq('id', parcelId).single()
-      if (e2) return fail(e2)
       setData((d) => ({ ...d, parcels: d.parcels.map((p) => (p.id === parcelId ? normalize('parcels', row) : p)) }))
       return true
     },
     [fail]
+  )
+
+  const updateParcelStatus = useCallback(
+    async (parcelId, status, note) => {
+      const { error } = await supabase.rpc('update_parcel_status', { p_parcel_id: parcelId, p_status: status, p_note: note || null })
+      if (error) return fail(error)
+      return refetchParcel(parcelId)
+    },
+    [fail, refetchParcel]
+  )
+
+  // Rider ka apna status update (sirf agla step; database check karta hai)
+  const riderUpdateStatus = useCallback(
+    async (parcelId, status, note, codReceived) => {
+      const { error } = await supabase.rpc('rider_update_status', {
+        p_parcel_id: parcelId,
+        p_status: status,
+        p_note: note || null,
+        p_cod_received: !!codReceived,
+      })
+      if (error) return fail(error)
+      return refetchParcel(parcelId)
+    },
+    [fail, refetchParcel]
+  )
+
+  // kind: 'pickup' ya 'delivery'; riderId null = rider hata dena
+  const assignRider = useCallback(
+    async (parcelId, riderId, kind = 'delivery') => {
+      const { error } = await supabase.rpc('assign_rider', { p_parcel_id: parcelId, p_rider_id: riderId || null, p_kind: kind })
+      if (error) return fail(error)
+      return refetchParcel(parcelId)
+    },
+    [fail, refetchParcel]
   )
 
   const markRequestPaid = useCallback(
@@ -267,8 +326,10 @@ export function StoreProvider({ children }) {
     update,
     remove,
     removeCompany,
-    createCompanyLogin,
+    createLogin,
+    riderUpdateStatus,
     updateParcelStatus,
+    assignRider,
     markRequestPaid,
     updateSettings,
     reload: loadAll,

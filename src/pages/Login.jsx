@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Truck, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
+import { homeFor } from '../lib/utils'
 
 // Sirf email yaad rakhi jati hai. Password browser ka password manager save karta hai
 // (autocomplete attributes ki wajah se), aur "Remember me" login session ko yaad rakhta hai.
@@ -39,7 +40,7 @@ export default function Login() {
     } catch {
       // storage blocked
     }
-    navigate(res.session.role === 'admin' ? '/admin' : '/company')
+    navigate(homeFor(res.session.role))
   }
 
   return (
@@ -56,7 +57,7 @@ export default function Login() {
         <form onSubmit={submit} className="card space-y-5 p-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Sign in</h2>
-            <p className="text-sm text-slate-500">Admin aur company dono isi form se login karein</p>
+            <p className="text-sm text-slate-500">Admin, company aur rider sab isi form se login karein</p>
           </div>
 
           <label className="block">

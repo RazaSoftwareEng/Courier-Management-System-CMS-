@@ -35,7 +35,7 @@ export default function DataTable({ columns, rows, filters = [], searchKeys, pag
         {filters.map((f) => (
           <select
             key={f.key}
-            className="input w-auto"
+            className="input w-full sm:w-auto"
             value={active[f.key] || ''}
             onChange={(e) => setActive((a) => ({ ...a, [f.key]: e.target.value }))}
           >
@@ -50,7 +50,7 @@ export default function DataTable({ columns, rows, filters = [], searchKeys, pag
             })}
           </select>
         ))}
-        <div className="ml-auto flex gap-2">
+        <div className="flex gap-2 sm:ml-auto">
           {toolbar}
           {exportName && (
             <button className="btn-secondary" onClick={() => downloadCsv(`${exportName}.csv`, columns.filter((c) => c.key !== 'actions'), filtered)}>

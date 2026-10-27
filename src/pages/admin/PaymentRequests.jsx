@@ -65,7 +65,7 @@ export default function PaymentRequests() {
     <div>
       <PageHeader title="Payment Requests" subtitle="Companies ki withdrawal requests: approve, reject ya pay karein" />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Pending" value={totals.pending.length} hint={money(sum(totals.pending, 'amount'))} icon={Clock} tone="amber" />
         <StatCard label="Approved (Unpaid)" value={totals.approved.length} hint={money(sum(totals.approved, 'amount'))} icon={CheckCircle2} tone="sky" />
         <StatCard label="Paid" value={totals.paid.length} hint={money(sum(totals.paid, 'amount'))} icon={Banknote} tone="emerald" />
@@ -141,7 +141,7 @@ function ActionForm({ action, company, bank, onSubmit, onCancel }) {
         <div className="grid grid-cols-2 gap-3">
           <label>
             <span className="mb-1 block font-medium">Amount</span>
-            <input className="input" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input className="input" type="number" min="1" max="10000000" required value={amount} onChange={(e) => setAmount(e.target.value)} />
           </label>
           <label>
             <span className="mb-1 block font-medium">Status</span>
@@ -156,12 +156,12 @@ function ActionForm({ action, company, bank, onSubmit, onCancel }) {
       {type === 'pay' && (
         <label className="block">
           <span className="mb-1 block font-medium">Transaction Reference *</span>
-          <input className="input" required placeholder="e.g. TRX123456" value={reference} onChange={(e) => setReference(e.target.value)} />
+          <input className="input" required maxLength={50} placeholder="e.g. TRX123456" value={reference} onChange={(e) => setReference(e.target.value)} />
         </label>
       )}
       <label className="block">
         <span className="mb-1 block font-medium">Note {type === 'reject' && '*'}</span>
-        <textarea className="input" rows={2} required={type === 'reject'} value={note} onChange={(e) => setNote(e.target.value)} />
+        <textarea className="input" rows={2} maxLength={300} required={type === 'reject'} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
       <div className="flex justify-end gap-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>

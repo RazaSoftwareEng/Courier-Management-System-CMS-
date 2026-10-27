@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Building2, Users, Package, Wallet, HandCoins, CheckCircle2, Truck, Banknote } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
+import { ACTIVE_STATUSES } from '../../data/constants'
 import { StatCard, PageHeader, Section, StatusBadge } from '../../components/ui'
 import { ParcelsBarChart, RevenueAreaChart, StatusDonut } from '../../components/Charts'
 import { money, sum, countBy, monthlySeries, isToday, byId, date } from '../../lib/utils'
@@ -17,7 +18,8 @@ export default function AdminDashboard() {
       paidOut: sum(payments, 'amount'),
       pendingReqs: payment_requests.filter((r) => r.status === 'Pending'),
       deliveredToday: parcels.filter((p) => p.status === 'Delivered' && p.history?.some((h) => h.status === 'Delivered' && isToday(h.at))).length,
-      inTransit: parcels.filter((p) => ['Picked', 'In Transit', 'Out for Delivery'].includes(p.status)).length,
+      inTransit: parcels.filter((p) => ACTIVE_STATUSES.includes(p.status) && p.status !== 'Booked').length,
+      atHub: parcels.filter((p) => p.status === 'At Head Office').length,
     }
   }, [parcels, payments, payment_requests])
 
@@ -37,10 +39,10 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <PageHeader title="Admin Dashboard" subtitle="Poore system ka overview" />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total Companies" value={companies.length} icon={Building2} hint={`${companies.filter((c) => c.status === 'Active').length} active`} />
         <StatCard label="Total Customers" value={customers.length} icon={Users} tone="sky" />
-        <StatCard label="Total Parcels" value={parcels.length} icon={Package} tone="slate" hint={`${stats.inTransit} in transit`} />
+        <StatCard label="Total Parcels" value={parcels.length} icon={Package} tone="slate" hint={`${stats.inTransit} raste mein · ${stats.atHub} head office par`} />
         <StatCard label="Delivered Today" value={stats.deliveredToday} icon={CheckCircle2} tone="emerald" />
         <StatCard label="Revenue (Charges)" value={money(stats.revenue)} icon={Wallet} tone="emerald" />
         <StatCard label="Total COD Collected" value={money(stats.cod)} icon={Banknote} tone="indigo" />

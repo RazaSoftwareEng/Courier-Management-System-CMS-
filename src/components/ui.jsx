@@ -6,6 +6,8 @@ const statusStyles = {
   // parcel
   Booked: 'bg-slate-100 text-slate-700',
   Picked: 'bg-sky-100 text-sky-700',
+  'At Head Office': 'bg-violet-100 text-violet-700',
+  'Arrived at Destination': 'bg-cyan-100 text-cyan-700',
   'In Transit': 'bg-indigo-100 text-indigo-700',
   'Out for Delivery': 'bg-amber-100 text-amber-800',
   Delivered: 'bg-emerald-100 text-emerald-700',
@@ -20,6 +22,11 @@ const statusStyles = {
   Suspended: 'bg-rose-100 text-rose-700',
   Verified: 'bg-emerald-100 text-emerald-700',
   Unverified: 'bg-slate-100 text-slate-600',
+  Inactive: 'bg-slate-100 text-slate-600',
+  // delivery type
+  Local: 'bg-slate-100 text-slate-700',
+  Domestic: 'bg-sky-100 text-sky-700',
+  International: 'bg-fuchsia-100 text-fuchsia-700',
 }
 
 export function StatusBadge({ status }) {
@@ -42,17 +49,19 @@ const tones = {
 
 export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint }) {
   return (
-    <div className="card flex items-start gap-4 p-5">
-      {Icon && (
-        <div className={`rounded-lg p-2.5 ${tones[tone]}`}>
-          <Icon size={20} />
-        </div>
-      )}
-      <div className="min-w-0">
-        <p className="text-sm text-slate-500">{label}</p>
-        <p className="mt-1 truncate text-2xl font-semibold text-slate-900">{value}</p>
-        {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+    <div className="card min-w-0 p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm leading-snug text-slate-500">{label}</p>
+        {Icon && (
+          <div className={`shrink-0 rounded-lg p-2 ${tones[tone]}`}>
+            <Icon size={18} />
+          </div>
+        )}
       </div>
+      <p className="mt-2 truncate text-xl font-semibold text-slate-900 sm:text-2xl" title={typeof value === 'string' ? value : undefined}>
+        {value}
+      </p>
+      {hint && <p className="mt-1 truncate text-xs text-slate-400">{hint}</p>}
     </div>
   )
 }
@@ -61,7 +70,7 @@ export function PageHeader({ title, subtitle, children }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
+        <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap gap-2">{children}</div>

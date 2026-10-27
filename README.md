@@ -7,6 +7,10 @@ React + Tailwind CSS frontend, Supabase backend (Auth + Postgres + RLS).
 1. Supabase SQL Editor mein in order chalayein (har file ek dafa):
    - [supabase/schema.sql](supabase/schema.sql)
    - [supabase/migrations/002_admin_controls_status.sql](supabase/migrations/002_admin_controls_status.sql) (status sirf admin, live updates)
+   - [supabase/migrations/003_riders.sql](supabase/migrations/003_riders.sql) (riders + rider assignment)
+   - [supabase/migrations/004_validation.sql](supabase/migrations/004_validation.sql) (phone/CNIC/IBAN validation aur limits)
+   - [supabase/migrations/005_rider_login.sql](supabase/migrations/005_rider_login.sql) (rider login + rider dashboard)
+   - [supabase/migrations/006_hub_flow.sql](supabase/migrations/006_hub_flow.sql) (head office flow, out of city / international, COD received)
    - Email template: Authentication > Emails > Confirm signup mein [supabase/email-templates/confirm-signup.html](supabase/email-templates/confirm-signup.html)
    - Authentication > URL Configuration: Site URL aur Redirect URLs mein app ka URL (e.g. `http://localhost:5173/**`)
 2. Project root mein `.env`:

@@ -23,12 +23,12 @@ export default function CompanyProfile() {
         <EntityForm
           key={company.id}
           fields={[
-            { name: 'name', label: 'Company Name', required: true },
-            { name: 'owner_name', label: 'Owner Name', required: true },
-            { name: 'email', label: 'Email', type: 'email', required: true },
-            { name: 'phone', label: 'Phone', required: true },
+            { name: 'name', label: 'Company Name', required: true, rule: 'name' },
+            { name: 'owner_name', label: 'Owner Name', required: true, rule: 'personName' },
+            { name: 'email', label: 'Email', type: 'email', required: true, rule: 'email' },
+            { name: 'phone', label: 'Phone', required: true, rule: 'phone' },
             { name: 'city', label: 'City', type: 'select', options: CITIES, required: true },
-            { name: 'address', label: 'Address', type: 'textarea' },
+            { name: 'address', label: 'Address', type: 'textarea', rule: 'address' },
           ]}
           initial={company}
           submitLabel="Save Profile"

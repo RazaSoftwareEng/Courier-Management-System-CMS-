@@ -71,9 +71,9 @@ export default function DashboardLayout({ nav, title, userName, userRole }) {
             <Menu size={22} />
           </button>
           <div className="ml-auto flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-medium text-slate-900">{userName}</p>
-              <p className="text-xs text-slate-500">{userRole}</p>
+            <div className="hidden min-w-0 text-right sm:block">
+              <p className="truncate text-sm font-medium text-slate-900">{userName}</p>
+              <p className="truncate text-xs text-slate-500">{userRole}</p>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">
               {userName?.[0]}

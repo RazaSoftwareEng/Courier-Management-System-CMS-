@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, Wallet, Banknote, Package, Percent } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import { money, date, byId, sum, companyLedger } from '../../lib/utils'
+import { LIMITS } from '../../lib/validation'
 import DataTable from '../../components/DataTable'
 import EntityForm from '../../components/EntityForm'
 import { Modal, ConfirmDialog, PageHeader, IconButton, StatCard, Section } from '../../components/ui'
@@ -17,9 +18,9 @@ export default function Payments() {
 
   const fields = [
     { name: 'company_id', label: 'Company', type: 'select', required: true, options: companies.map((c) => ({ value: c.id, label: c.name })) },
-    { name: 'amount', label: 'Amount', type: 'number', required: true, min: 1 },
+    { name: 'amount', label: 'Amount', type: 'number', required: true, ...LIMITS.amount },
     { name: 'method', label: 'Method', type: 'select', options: ['Bank Transfer', 'Cash', 'Cheque', 'JazzCash', 'EasyPaisa'], required: true, default: 'Bank Transfer' },
-    { name: 'reference', label: 'Reference', required: true },
+    { name: 'reference', label: 'Reference', required: true, rule: 'reference' },
   ]
 
   const columns = [
@@ -48,7 +49,7 @@ export default function Payments() {
         </button>
       </PageHeader>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard label="Total COD Collected" value={money(sum(ledgers, 'totalCod'))} icon={Package} />
         <StatCard label="Delivery Charges Earned" value={money(sum(ledgers, 'charges'))} icon={Wallet} tone="emerald" />
         <StatCard label="Commission" value={money(sum(ledgers, 'commissionAmount'))} icon={Percent} tone="sky" />
