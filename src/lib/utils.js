@@ -121,3 +121,14 @@ export function riderWeekSeries(parcels, riderId, days = 7) {
 
 // Har role ka home page
 export const homeFor = (role) => ({ admin: '/admin', company: '/company', rider: '/rider' })[role] || '/login'
+
+// Parcel ka receiver: naye parcels par maloomat parcel mein hi hai, purane parcels par customer se
+export const receiverOf = (parcel, customerMap = {}) => {
+  const c = customerMap[parcel.customer_id] || {}
+  return {
+    name: parcel.receiver_name || c.name || '',
+    phone: parcel.receiver_phone || c.phone || '',
+    landmark: parcel.receiver_landmark || '',
+    address: parcel.receiver_address || c.address || '',
+  }
+}

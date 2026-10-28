@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Phone, MapPin, Store, Package, Undo2, Building2 } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
-import { money, dateTime } from '../lib/utils'
+import { money, dateTime, byId, receiverOf } from '../lib/utils'
 import { Modal, StatusBadge } from './ui'
 
 // Rider ka is parcel par kaam (database ke rider_update_status() jaisa):
@@ -30,7 +30,7 @@ export default function RiderParcelCard({ parcel }) {
   const [codReceived, setCodReceived] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const customer = customers.find((c) => c.id === parcel.customer_id)
+  const receiver = receiverOf(parcel, byId(customers))
   const company = companies.find((c) => c.id === parcel.company_id)
   const task = riderTask(parcel, session.rider_id)
   const lastUpdate = parcel.history?.[parcel.history.length - 1]
@@ -78,9 +78,10 @@ export default function RiderParcelCard({ parcel }) {
           icon={MapPin}
           tone="bg-emerald-50 text-emerald-600"
           title={task?.kind === 'pickup' ? 'Final destination' : 'Deliver to'}
-          name={customer?.name}
-          address={[customer?.address, parcel.city, parcel.destination_country !== 'Pakistan' ? parcel.destination_country : null].filter(Boolean).join(', ')}
-          phone={task?.kind === 'delivery' ? customer?.phone : null}
+          name={receiver.name}
+          address={[receiver.address, parcel.city, parcel.destination_country !== 'Pakistan' ? parcel.destination_country : null].filter(Boolean).join(', ')}
+          landmark={receiver.landmark}
+          phone={task?.kind === 'delivery' ? receiver.phone : null}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2">
@@ -131,7 +132,7 @@ export default function RiderParcelCard({ parcel }) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
-            <div className="flex justify-end gap-2">
+            <div className="form-footer flex justify-end gap-2">
               <button className="btn-secondary" onClick={close}>
                 Cancel
               </button>
@@ -150,7 +151,7 @@ export default function RiderParcelCard({ parcel }) {
   )
 }
 
-function Stop({ icon: Icon, tone, title, name, address, phone }) {
+function Stop({ icon: Icon, tone, title, name, address, landmark, phone }) {
   return (
     <div className="flex gap-3">
       <div className={`mt-0.5 h-fit rounded-lg p-1.5 ${tone}`}>
@@ -160,6 +161,7 @@ function Stop({ icon: Icon, tone, title, name, address, phone }) {
         <p className="text-xs uppercase text-slate-400">{title}</p>
         <p className="font-medium text-slate-800">{name || '-'}</p>
         {address && <p className="text-slate-500">{address}</p>}
+        {landmark && <p className="text-slate-500">Near: {landmark}</p>}
       </div>
       {phone && (
         <a href={`tel:${phone}`} className="self-center rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title="Call">

@@ -4,7 +4,7 @@ import { PARCEL_STATUSES } from '../../data/constants'
 import { PageHeader, StatusBadge } from '../../components/ui'
 import DataTable from '../../components/DataTable'
 import RiderParcelCard, { riderTask } from '../../components/RiderParcelCard'
-import { money, dateTime, byId } from '../../lib/utils'
+import { money, dateTime, byId, receiverOf } from '../../lib/utils'
 
 export default function RiderParcels() {
   const { session, parcels, customers } = useStore()
@@ -17,7 +17,7 @@ export default function RiderParcels() {
 
   const columns = [
     { key: 'tracking_id', label: 'Tracking ID', render: (p) => <span className="font-mono font-medium text-indigo-600">{p.tracking_id}</span> },
-    { key: 'customer', label: 'Customer', render: (p) => customerMap[p.customer_id]?.name || '-', csv: (p) => customerMap[p.customer_id]?.name },
+    { key: 'receiver', label: 'Receiver', render: (p) => receiverOf(p, customerMap).name || '-', csv: (p) => receiverOf(p, customerMap).name },
     { key: 'city', label: 'City' },
     { key: 'cod_amount', label: 'COD', align: 'right', render: (p) => money(p.cod_amount) },
     { key: 'status', label: 'Status', render: (p) => <StatusBadge status={p.status} /> },
@@ -64,7 +64,7 @@ export default function RiderParcels() {
           rows={done}
           exportName="my-completed-parcels"
           filters={[{ key: 'status', label: 'Status', options: PARCEL_STATUSES }]}
-          searchKeys={['tracking_id', 'city', (p) => customerMap[p.customer_id]?.name]}
+          searchKeys={['tracking_id', 'city', (p) => receiverOf(p, customerMap).name]}
         />
       )}
     </div>

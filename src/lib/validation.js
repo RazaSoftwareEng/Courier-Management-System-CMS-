@@ -24,6 +24,25 @@ export const RULES = {
     pattern: /^03\d{9}$/,
     message: 'Mobile number 03XXXXXXXXX (11 digits)',
   },
+  // Bahar ke mulk ka number: + aur country code ke saath
+  intlPhone: {
+    maxLength: 20,
+    inputMode: 'tel',
+    placeholder: '+971501234567',
+    normalize: (v) => {
+      const d = v.replace(/[\s()-]/g, '')
+      return d.startsWith('00') ? '+' + d.slice(2) : d
+    },
+    pattern: /^\+\d{8,15}$/,
+    message: 'Number + aur country code ke saath, e.g. +971501234567',
+  },
+  landmark: { maxLength: 100, normalize: (v) => v.trim().replace(/\s+/g, ' ') },
+  fullAddress: {
+    maxLength: 250,
+    normalize: (v) => v.trim(),
+    pattern: /^[\s\S]{5,}$/,
+    message: 'Poora address likhein (kam az kam 5 characters)',
+  },
   cnic: {
     maxLength: 15,
     inputMode: 'numeric',

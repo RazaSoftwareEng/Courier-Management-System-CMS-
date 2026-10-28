@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { PackageCheck, CheckCircle2, Undo2, Banknote, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import { PageHeader, StatCard, Section, StatusBadge } from '../../components/ui'
-import { money, dateTime, byId, riderDayStats } from '../../lib/utils'
+import { money, dateTime, byId, riderDayStats, receiverOf } from '../../lib/utils'
 
 const toInput = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -60,7 +60,7 @@ export default function RiderReport({ riderId }) {
               <thead className="text-xs uppercase text-slate-500">
                 <tr>
                   <th className="py-2 pr-4 font-medium">Tracking</th>
-                  <th className="py-2 pr-4 font-medium">Customer</th>
+                  <th className="py-2 pr-4 font-medium">Receiver</th>
                   <th className="py-2 pr-4 font-medium">City</th>
                   <th className="py-2 text-right font-medium">COD</th>
                 </tr>
@@ -69,7 +69,7 @@ export default function RiderReport({ riderId }) {
                 {stats.delivered.map((p) => (
                   <tr key={p.id}>
                     <td className="whitespace-nowrap py-2 pr-4 font-mono text-indigo-600">{p.tracking_id}</td>
-                    <td className="whitespace-nowrap py-2 pr-4">{customerMap[p.customer_id]?.name || '-'}</td>
+                    <td className="whitespace-nowrap py-2 pr-4">{receiverOf(p, customerMap).name || '-'}</td>
                     <td className="whitespace-nowrap py-2 pr-4">{p.city}</td>
                     <td className="whitespace-nowrap py-2 text-right font-medium">{money(p.cod_amount)}</td>
                   </tr>

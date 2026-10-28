@@ -126,7 +126,7 @@ export default function EntityForm({ fields, initial = {}, onSubmit, onCancel, s
           )
         })}
       </div>
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="form-footer mt-6 flex justify-end gap-2">
         {onCancel && (
           <button type="button" className="btn-secondary" onClick={onCancel}>
             Cancel

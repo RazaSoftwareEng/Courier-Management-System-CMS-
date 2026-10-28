@@ -87,7 +87,7 @@ export default function CompanyPaymentRequests() {
             <p className="text-xs text-slate-500">
               Payment is account mein aayegi: {bank.bank_name} · {bank.iban}
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="form-footer flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>
                 Cancel
               </button>

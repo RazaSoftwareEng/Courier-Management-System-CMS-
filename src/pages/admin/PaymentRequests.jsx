@@ -163,7 +163,7 @@ function ActionForm({ action, company, bank, onSubmit, onCancel }) {
         <span className="mb-1 block font-medium">Note {type === 'reject' && '*'}</span>
         <textarea className="input" rows={2} maxLength={300} required={type === 'reject'} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
-      <div className="flex justify-end gap-2">
+      <div className="form-footer flex justify-end gap-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Cancel
         </button>

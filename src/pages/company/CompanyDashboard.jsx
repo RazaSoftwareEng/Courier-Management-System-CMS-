@@ -5,7 +5,7 @@ import { useStore } from '../../store/StoreContext'
 import { ACTIVE_STATUSES } from '../../data/constants'
 import { StatCard, PageHeader, Section, StatusBadge } from '../../components/ui'
 import { ParcelsBarChart, RevenueAreaChart, StatusDonut } from '../../components/Charts'
-import { money, countBy, monthlySeries, companyLedger, byId } from '../../lib/utils'
+import { money, countBy, monthlySeries, companyLedger, byId, receiverOf } from '../../lib/utils'
 
 export default function CompanyDashboard() {
   const store = useStore()
@@ -94,7 +94,7 @@ export default function CompanyDashboard() {
                 <div>
                   <p className="font-mono font-medium text-indigo-600">{p.tracking_id}</p>
                   <p className="text-xs text-slate-400">
-                    {customerMap[p.customer_id]?.name} · {p.city}
+                    {receiverOf(p, customerMap).name} · {p.city}
                   </p>
                 </div>
                 <StatusBadge status={p.status} />

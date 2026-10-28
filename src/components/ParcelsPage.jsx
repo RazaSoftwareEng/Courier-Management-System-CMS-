@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, Eye, RefreshCw, Printer, Truck, Check, Bike, Banknote } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { PARCEL_STATUSES, CITIES, COUNTRIES, DELIVERY_TYPES, deliveryCharges, deliveryType } from '../data/constants'
-import { money, date, dateTime, byId } from '../lib/utils'
+import { money, date, dateTime, byId, receiverOf } from '../lib/utils'
 import { RULES, LIMITS, check, checkNumber } from '../lib/validation'
 import DataTable from './DataTable'
 import { Modal, ConfirmDialog, StatusBadge, PageHeader, IconButton } from './ui'
@@ -37,15 +37,15 @@ export default function ParcelsPage({ companyId }) {
     { key: 'tracking_id', label: 'Tracking ID', render: (p) => <span className="font-mono font-medium text-indigo-600">{p.tracking_id}</span> },
     ...(!companyId ? [{ key: 'company', label: 'Company', render: (p) => companyMap[p.company_id]?.name || '-', csv: (p) => companyMap[p.company_id]?.name }] : []),
     {
-      key: 'customer',
-      label: 'Customer',
+      key: 'receiver',
+      label: 'Receiver',
       render: (p) => (
         <div>
-          <p className="font-medium text-slate-800">{customerMap[p.customer_id]?.name || '-'}</p>
-          <p className="text-xs text-slate-400">{customerMap[p.customer_id]?.phone}</p>
+          <p className="font-medium text-slate-800">{receiverOf(p, customerMap).name || '-'}</p>
+          <p className="text-xs text-slate-400">{receiverOf(p, customerMap).phone}</p>
         </div>
       ),
-      csv: (p) => customerMap[p.customer_id]?.name,
+      csv: (p) => receiverOf(p, customerMap).name,
     },
     {
       key: 'city',
@@ -102,14 +102,8 @@ export default function ParcelsPage({ companyId }) {
       : []),
   ]
 
-  const save = async ({ parcel, newCustomer }) => {
-    let customer = customerMap[parcel.customer_id]
-    if (newCustomer) {
-      customer = await add('customers', { ...newCustomer, company_id: parcel.company_id })
-      if (!customer) return
-    }
-    // Destination hamesha customer ke address se
-    const payload = { ...parcel, customer_id: customer.id, city: customer.city, destination_country: customer.country || 'Pakistan' }
+  // Receiver ki maloomat seedha parcel par save hoti hai
+  const save = async (payload) => {
     if (form.parcel) {
       if (!(await update('parcels', form.parcel.id, payload))) return
       notify('Parcel update ho gaya')
@@ -143,8 +137,10 @@ export default function ParcelsPage({ companyId }) {
           'city',
           'destination_country',
           'description',
-          (p) => customerMap[p.customer_id]?.name,
-          (p) => customerMap[p.customer_id]?.phone,
+          (p) => receiverOf(p, customerMap).name,
+          (p) => receiverOf(p, customerMap).phone,
+          'receiver_landmark',
+          'receiver_address',
           (p) => companyMap[p.company_id]?.name,
           (p) => riderMap[p.rider_id]?.name,
           (p) => riderMap[p.pickup_rider_id]?.name,
@@ -180,7 +176,7 @@ export default function ParcelsPage({ companyId }) {
             return (
               <ParcelDetail
                 parcel={current}
-                customer={customerMap[current.customer_id]}
+                receiver={receiverOf(current, customerMap)}
                 company={companyMap[current.company_id]}
                 pickupRider={riderMap[current.pickup_rider_id]}
                 deliveryRider={riderMap[current.rider_id]}
@@ -207,25 +203,34 @@ function FieldError({ msg }) {
 
 function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
   const { companies, customers, rates, settings } = useStore()
+  // Edit par purane parcel ki maloomat (purane parcels mein customer se)
+  const old = parcel ? receiverOf(parcel, byId(customers)) : {}
   const [v, setV] = useState({
     company_id: parcel?.company_id || companyId || '',
-    customer_id: parcel?.customer_id || '',
+    receiver_name: old.name || '',
+    receiver_phone: old.phone || '',
+    destination_country: parcel?.destination_country || 'Pakistan',
+    city: parcel?.city || '',
+    receiver_landmark: old.landmark || '',
+    receiver_address: old.address || '',
     weight: parcel?.weight ?? 1,
     cod_amount: parcel?.cod_amount ?? '',
     delivery_charges: parcel?.delivery_charges ?? '',
     description: parcel?.description || '',
   })
-  const [isNew, setIsNew] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [nc, setNc] = useState({ name: '', phone: '', city: '', country: 'Pakistan', address: '' })
   const [errors, setErrors] = useState({})
-  const set = (k, val) => setV((s) => ({ ...s, [k]: val }))
+  const set = (k, val) => {
+    setV((s) => ({ ...s, [k]: val }))
+    setErrors((e) => (e[k] ? { ...e, [k]: null } : e))
+  }
   const errCls = (k) => (errors[k] ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100' : '')
 
-  const companyCustomers = customers.filter((c) => c.company_id === v.company_id)
-  const dest = isNew ? nc : customers.find((c) => c.id === v.customer_id) || {}
-  const type = dest.city ? deliveryType(dest, settings) : null
-  const suggested = deliveryCharges({ city: dest.city, weight: v.weight, country: dest.country }, rates, settings)
+  const isPakistan = (v.destination_country || 'Pakistan').trim().toLowerCase() === 'pakistan'
+  const phoneRule = isPakistan ? 'phone' : 'intlPhone'
+  const dest = { city: v.city, country: v.destination_country }
+  const type = v.city ? deliveryType(dest, settings) : null
+  const suggested = deliveryCharges({ ...dest, weight: v.weight }, rates, settings)
   const cityOptions = [...new Set([...rates.map((r) => r.city), ...CITIES])]
 
   const submit = async (e) => {
@@ -237,19 +242,15 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
     }
 
     if (!v.company_id) errs.company_id = 'Company select karein'
-    if (!isNew && !v.customer_id) errs.customer_id = 'Customer select karein ya naya customer add karein'
-
-    let customer = null
-    if (isNew) {
-      customer = {
-        name: take('nc_name', check('personName', nc.name, { required: true, label: 'Name' })),
-        phone: take('nc_phone', check('phone', nc.phone, { required: true, label: 'Phone' })),
-        city: take('nc_city', check('city', nc.city, { required: true, label: 'City' })),
-        country: take('nc_country', check('city', nc.country || 'Pakistan', { required: true, label: 'Country' })),
-        address: take('nc_address', check('address', nc.address, { required: true, label: 'Address' })),
-      }
-      setNc(customer)
+    const receiver = {
+      receiver_name: take('receiver_name', check('personName', v.receiver_name, { required: true, label: 'Naam' })),
+      receiver_phone: take('receiver_phone', check(phoneRule, v.receiver_phone, { required: true, label: 'Phone' })),
+      destination_country: take('destination_country', check('city', v.destination_country || 'Pakistan', { required: true, label: 'Country' })),
+      city: take('city', check('city', v.city, { required: true, label: 'City' })),
+      receiver_landmark: take('receiver_landmark', check('landmark', v.receiver_landmark, { required: true, label: 'Landmark' })),
+      receiver_address: take('receiver_address', check('fullAddress', v.receiver_address, { required: true, label: 'Address' })),
     }
+    setV((s) => ({ ...s, ...receiver }))
     const weight = take('weight', checkNumber(v.weight, { ...LIMITS.weight, label: 'Weight' }))
     const cod = take('cod_amount', checkNumber(v.cod_amount, { ...LIMITS.cod, label: 'COD' }))
     // Company ke liye database khud charges lagata hai
@@ -258,22 +259,36 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
     const description = take('description', check('text', v.description))
 
     setErrors(errs)
-    if (Object.keys(errs).length) return
+    if (Object.values(errs).some(Boolean)) return
 
     setBusy(true)
     await onSubmit({
-      parcel: { ...v, weight, cod_amount: cod, delivery_charges: charges, description: description || null },
-      newCustomer: customer,
+      company_id: v.company_id,
+      ...receiver,
+      weight,
+      cod_amount: cod,
+      delivery_charges: charges,
+      description: description || null,
     })
     setBusy(false)
   }
 
+  const field = (key, label, input, full) => (
+    <label className={`block ${full ? 'sm:col-span-2' : ''}`}>
+      <span className="mb-1 block text-sm font-medium text-slate-700">
+        {label} <span className="text-rose-500">*</span>
+      </span>
+      {input}
+      <FieldError msg={errors[key]} />
+    </label>
+  )
+
   return (
-    <form onSubmit={submit} noValidate className="space-y-5">
+    <form onSubmit={submit} noValidate className="space-y-4">
       {!companyId && (
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700">Company *</span>
-          <select className="input" value={v.company_id} onChange={(e) => setV((s) => ({ ...s, company_id: e.target.value, customer_id: '' }))}>
+          <select className={`input ${errCls('company_id')}`} value={v.company_id} onChange={(e) => set('company_id', e.target.value)}>
             <option value="">Select company...</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
@@ -285,58 +300,76 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
         </label>
       )}
 
-      <div className="rounded-lg border border-slate-200 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-800">Customer (Receiver)</p>
-          <button type="button" className="text-sm font-medium text-indigo-600 hover:underline" onClick={() => setIsNew(!isNew)}>
-            {isNew ? 'Existing customer select karein' : '+ New customer'}
-          </button>
-        </div>
-        {isNew ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <input className={`input ${errCls('nc_name')}`} maxLength={RULES.personName.maxLength} placeholder="Name *" value={nc.name} onChange={(e) => setNc({ ...nc, name: e.target.value })} />
-              <FieldError msg={errors.nc_name} />
-            </div>
-            <div>
-              <input className={`input ${errCls('nc_phone')}`} maxLength={RULES.phone.maxLength} inputMode="tel" placeholder="Phone * (03001234567)" value={nc.phone} onChange={(e) => setNc({ ...nc, phone: e.target.value })} />
-              <FieldError msg={errors.nc_phone} />
-            </div>
-            <div>
-              <input className={`input ${errCls('nc_country')}`} list="parcel-countries" maxLength={60} placeholder="Country *" value={nc.country} onChange={(e) => setNc({ ...nc, country: e.target.value })} />
+      <div className="rounded-lg border border-slate-200 p-3 sm:p-4">
+        <p className="mb-3 text-sm font-semibold text-slate-800">Receiver (jisko parcel deliver hoga)</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {field(
+            'receiver_name',
+            'Naam',
+            <input className={`input ${errCls('receiver_name')}`} maxLength={RULES.personName.maxLength} placeholder="e.g. Babar Ali" value={v.receiver_name} onChange={(e) => set('receiver_name', e.target.value)} />
+          )}
+          {field(
+            'receiver_phone',
+            'Phone',
+            <input
+              className={`input ${errCls('receiver_phone')}`}
+              maxLength={RULES[phoneRule].maxLength}
+              inputMode="tel"
+              placeholder={RULES[phoneRule].placeholder}
+              value={v.receiver_phone}
+              onChange={(e) => set('receiver_phone', e.target.value)}
+            />
+          )}
+          {field(
+            'destination_country',
+            'Country',
+            <>
+              <input className={`input ${errCls('destination_country')}`} list="parcel-countries" maxLength={60} value={v.destination_country} onChange={(e) => set('destination_country', e.target.value)} />
               <datalist id="parcel-countries">
                 {COUNTRIES.map((c) => (
                   <option key={c} value={c} />
                 ))}
               </datalist>
-              <FieldError msg={errors.nc_country} />
-            </div>
-            <div>
-              <input className={`input ${errCls('nc_city')}`} list="parcel-cities" maxLength={RULES.city.maxLength} placeholder="City *" value={nc.city} onChange={(e) => setNc({ ...nc, city: e.target.value })} />
+            </>
+          )}
+          {field(
+            'city',
+            'City',
+            <>
+              <input className={`input ${errCls('city')}`} list="parcel-cities" maxLength={RULES.city.maxLength} placeholder="e.g. Karachi" value={v.city} onChange={(e) => set('city', e.target.value)} />
               <datalist id="parcel-cities">
                 {cityOptions.map((c) => (
                   <option key={c} value={c} />
                 ))}
               </datalist>
-              <FieldError msg={errors.nc_city} />
-            </div>
-            <div className="sm:col-span-2">
-              <input className={`input ${errCls('nc_address')}`} maxLength={RULES.address.maxLength} placeholder="Address *" value={nc.address} onChange={(e) => setNc({ ...nc, address: e.target.value })} />
-              <FieldError msg={errors.nc_address} />
-            </div>
-          </div>
-        ) : (
-          <select className="input" value={v.customer_id} onChange={(e) => set('customer_id', e.target.value)} disabled={!v.company_id}>
-            <option value="">{v.company_id ? 'Select customer...' : 'Pehle company select karein'}</option>
-            {companyCustomers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} · {c.phone} · {c.city}
-                {c.country && c.country !== 'Pakistan' ? `, ${c.country}` : ''}
-              </option>
-            ))}
-          </select>
-        )}
-        {!isNew && <FieldError msg={errors.customer_id} />}
+            </>
+          )}
+          {field(
+            'receiver_landmark',
+            'Qareeb ki mashhoor jagah (landmark)',
+            <input
+              className={`input ${errCls('receiver_landmark')}`}
+              maxLength={RULES.landmark.maxLength}
+              placeholder="e.g. Liberty Market ke saath, Jamia Masjid ke samne"
+              value={v.receiver_landmark}
+              onChange={(e) => set('receiver_landmark', e.target.value)}
+            />,
+            true
+          )}
+          {field(
+            'receiver_address',
+            'Poora address (ghar / office number, street, area)',
+            <textarea
+              className={`input ${errCls('receiver_address')}`}
+              rows={2}
+              maxLength={RULES.fullAddress.maxLength}
+              placeholder="e.g. House 41-K, Street 5, Block K, Gulberg III"
+              value={v.receiver_address}
+              onChange={(e) => set('receiver_address', e.target.value)}
+            />,
+            true
+          )}
+        </div>
         {type && (
           <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
             <StatusBadge status={type} />
@@ -345,7 +378,7 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700">Weight (kg) *</span>
           <input className={`input ${errCls('weight')}`} type="number" step="0.1" {...LIMITS.weight} value={v.weight} onChange={(e) => set('weight', e.target.value)} />
@@ -356,7 +389,7 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
           <input className={`input ${errCls('cod_amount')}`} type="number" {...LIMITS.cod} value={v.cod_amount} onChange={(e) => set('cod_amount', e.target.value)} />
           <FieldError msg={errors.cod_amount} />
         </label>
-        <label className="block">
+        <label className="col-span-2 block sm:col-span-1">
           <span className="mb-1 block text-sm font-medium text-slate-700">Delivery Charges</span>
           {companyId ? (
             <input className="input bg-slate-50" disabled value={`Rs ${suggested} (auto)`} />
@@ -365,13 +398,13 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
           )}
           <FieldError msg={errors.delivery_charges} />
         </label>
-        <label className="block sm:col-span-3">
+        <label className="col-span-2 block sm:col-span-3">
           <span className="mb-1 block text-sm font-medium text-slate-700">Description</span>
           <input className="input" maxLength={RULES.text.maxLength} placeholder="e.g. Clothes, Shoes" value={v.description} onChange={(e) => set('description', e.target.value)} />
         </label>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="form-footer flex justify-end gap-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Cancel
         </button>
@@ -472,7 +505,7 @@ function StatusForm({ parcel, riders, onSubmit, onCancel }) {
       )}
 
       <input className="input" maxLength={300} placeholder={`Note (optional), ${NOTE_HINT[status] || 'e.g. Customer ghar par nahi tha'}`} value={note} onChange={(e) => setNote(e.target.value)} />
-      <div className="flex justify-end gap-2">
+      <div className="form-footer flex justify-end gap-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Cancel
         </button>
@@ -510,7 +543,7 @@ function RiderInfo({ label, rider }) {
   )
 }
 
-function ParcelDetail({ parcel, customer, company, pickupRider, deliveryRider }) {
+function ParcelDetail({ parcel, receiver, company, pickupRider, deliveryRider }) {
   const history = [...(parcel.history || [])].reverse()
   return (
     <div className="space-y-5">
@@ -544,9 +577,10 @@ function ParcelDetail({ parcel, customer, company, pickupRider, deliveryRider })
           </div>
           <div>
             <p className="text-xs uppercase text-slate-500">To</p>
-            <p className="font-medium">{customer?.name}</p>
-            <p className="text-slate-500">{customer?.phone}</p>
-            <p className="text-slate-500">{[customer?.address, destination(parcel)].filter(Boolean).join(', ')}</p>
+            <p className="font-medium">{receiver.name}</p>
+            <p className="text-slate-500">{receiver.phone}</p>
+            <p className="text-slate-500">{[receiver.address, destination(parcel)].filter(Boolean).join(', ')}</p>
+            {receiver.landmark && <p className="text-slate-500">Near: {receiver.landmark}</p>}
           </div>
           <div>
             <p className="text-xs uppercase text-slate-500">COD Amount</p>
