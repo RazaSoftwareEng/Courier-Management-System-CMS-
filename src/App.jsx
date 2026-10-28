@@ -17,7 +17,6 @@ import Riders from './pages/admin/Riders'
 import RiderDashboard from './pages/rider/RiderDashboard'
 import RiderParcels from './pages/rider/RiderParcels'
 import RiderReport from './pages/rider/RiderReport'
-import CompanyDashboard from './pages/company/CompanyDashboard'
 import CompanyBank from './pages/company/CompanyBank'
 import CompanyStatements from './pages/company/CompanyStatements'
 import CompanyBulkUpload from './pages/company/CompanyBulkUpload'
@@ -72,9 +71,8 @@ export default function App() {
     { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
   ]
 
+  // Filhaal company ko sirf Finance dikhaya ja raha hai
   const companyNav = [
-    { to: '/company', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/company/orders', label: 'Orders', icon: Package },
     {
       to: '/company/finance',
       label: 'Finance',
@@ -123,7 +121,7 @@ export default function App() {
           </RequireRole>
         }
       >
-        <Route index element={<CompanyDashboard />} />
+        <Route index element={<Navigate to="/company/finance/statements" replace />} />
         <Route path="orders" element={<ParcelsPage companyId={session?.company_id} />} />
         <Route path="orders/import" element={<CompanyBulkUpload />} />
         <Route path="finance" element={<Navigate to="/company/finance/statements" replace />} />
