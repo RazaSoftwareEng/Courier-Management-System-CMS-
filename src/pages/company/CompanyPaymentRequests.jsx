@@ -67,7 +67,7 @@ export default function CompanyPaymentRequests() {
           <div className="py-4 text-center text-sm">
             <Landmark size={36} className="mx-auto text-slate-300" />
             <p className="mt-3 text-slate-600">Request bhejne se pehle bank details add karein.</p>
-            <Link to="/company/bank" className="btn-primary mt-4">
+            <Link to="/company/finance/account" className="btn-primary mt-4">
               Add Bank Details
             </Link>
           </div>

@@ -1,17 +1,35 @@
 import { useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, Wallet, Banknote, Package, Percent } from 'lucide-react'
+import { Plus, Pencil, Trash2, Wallet, Banknote, Package, Percent, FileSpreadsheet } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import { money, date, byId, sum, companyLedger } from '../../lib/utils'
-import { LIMITS } from '../../lib/validation'
+import { LIMITS, check, checkNumber } from '../../lib/validation'
 import DataTable from '../../components/DataTable'
 import EntityForm from '../../components/EntityForm'
 import { Modal, ConfirmDialog, PageHeader, IconButton, StatCard, Section } from '../../components/ui'
+import BulkImport, { collector, num } from '../../components/BulkImport'
+
+const METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'JazzCash', 'EasyPaisa']
+
+const IMPORT_COLUMNS = [
+  { key: 'company', label: 'Company', required: true, width: 28, aliases: ['company name'] },
+  { key: 'amount', label: 'Amount', required: true, width: 14 },
+  { key: 'method', label: 'Method', width: 16, aliases: ['payment method'] },
+  { key: 'reference', label: 'Reference', required: true, width: 24, aliases: ['ref', 'transaction id', 'tid'], text: true },
+]
+
+const IMPORT_NOTES = [
+  ['Company', 'Yes', 'Company ka naam bilkul waisa jaisa system mein hai'],
+  ['Amount', 'Yes', `${LIMITS.amount.min.toLocaleString()} se ${LIMITS.amount.max.toLocaleString()} tak`],
+  ['Method', 'No', `${METHODS.join(' / ')} — khali chhorein to Bank Transfer`],
+  ['Reference', 'Yes', 'Transaction ID / cheque number (zyada se zyada 50 characters)'],
+]
 
 export default function Payments() {
   const store = useStore()
   const { payments, companies, add, update, remove, notify } = store
   const [form, setForm] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [importing, setImporting] = useState(false)
 
   const companyMap = useMemo(() => byId(companies), [companies])
   const ledgers = useMemo(() => companies.map((c) => ({ id: c.id, name: c.name, ...companyLedger(c.id, store) })), [companies, store])
@@ -19,8 +37,39 @@ export default function Payments() {
   const fields = [
     { name: 'company_id', label: 'Company', type: 'select', required: true, options: companies.map((c) => ({ value: c.id, label: c.name })) },
     { name: 'amount', label: 'Amount', type: 'number', required: true, ...LIMITS.amount },
-    { name: 'method', label: 'Method', type: 'select', options: ['Bank Transfer', 'Cash', 'Cheque', 'JazzCash', 'EasyPaisa'], required: true, default: 'Bank Transfer' },
+    { name: 'method', label: 'Method', type: 'select', options: METHODS, required: true, default: 'Bank Transfer' },
     { name: 'reference', label: 'Reference', required: true, rule: 'reference' },
+  ]
+
+  // Direct payment: pehle 'Paid' request, phir payment (Add Payment wala tareeqa)
+  const recordPayment = async (v, opts) => {
+    const req = await add('payment_requests', { company_id: v.company_id, amount: v.amount, status: 'Paid', admin_note: 'Direct payment by admin' }, opts)
+    return req && add('payments', { ...v, request_id: req.id }, opts)
+  }
+
+  const companyByName = useMemo(() => Object.fromEntries(companies.map((c) => [c.name.trim().toLowerCase(), c])), [companies])
+
+  const validateImport = (raw) => {
+    const { errors, take } = collector()
+    const company = companyByName[raw.company.toLowerCase()]
+    if (!raw.company) errors.push('Company zaroori hai')
+    else if (!company) errors.push(`Company "${raw.company}" system mein nahi mili`)
+    const method = METHODS.find((m) => m.toLowerCase() === (raw.method || 'Bank Transfer').toLowerCase())
+    if (!method) errors.push(`Method in mein se ho: ${METHODS.join(', ')}`)
+    const payload = {
+      company_id: company?.id,
+      amount: take(checkNumber(num(raw.amount), { ...LIMITS.amount, label: 'Amount' }), 'Amount'),
+      method,
+      reference: take(check('reference', raw.reference, { required: true, label: 'Reference' }), 'Reference'),
+    }
+    return { payload, errors }
+  }
+
+  const importPreview = [
+    { label: 'Company', render: (r) => <span className="font-medium">{r.raw.company || '-'}</span> },
+    { label: 'Amount', align: 'right', render: (r) => (r.raw.amount ? money(num(r.raw.amount)) : '-') },
+    { label: 'Method', render: (r) => r.raw.method || 'Bank Transfer' },
+    { label: 'Reference', render: (r) => <span className="font-mono text-xs">{r.raw.reference || '-'}</span> },
   ]
 
   const columns = [
@@ -44,6 +93,9 @@ export default function Payments() {
   return (
     <div className="space-y-6">
       <PageHeader title="Payments" subtitle="Companies ko ki gayi payments aur har company ka hisaab">
+        <button className="btn-secondary" onClick={() => setImporting(true)}>
+          <FileSpreadsheet size={16} /> Import Excel
+        </button>
         <button className="btn-primary" onClick={() => setForm({})}>
           <Plus size={16} /> Add Payment
         </button>
@@ -105,12 +157,32 @@ export default function Payments() {
                 notify('Payment update ho gayi')
               } else {
                 // Direct payment ko bhi request ke tor par record karein taa ke company ka balance sahi rahe
-                const req = await add('payment_requests', { company_id: v.company_id, amount: v.amount, status: 'Paid', admin_note: 'Direct payment by admin' })
-                if (!req || !(await add('payments', { ...v, request_id: req.id }))) return
+                if (!(await recordPayment(v))) return
                 notify('Payment add ho gayi')
               }
               setForm(null)
             }}
+          />
+        )}
+      </Modal>
+
+      <Modal open={importing} title="Import Payments" onClose={() => setImporting(false)} size="lg">
+        {importing && (
+          <BulkImport
+            noun="payments"
+            columns={IMPORT_COLUMNS}
+            sheetName="Payments"
+            template={{
+              filename: 'payments-sample.xlsx',
+              sampleRows: [
+                [companies[0]?.name || 'Company Name', 5000, 'Bank Transfer', 'TXN123456'],
+                [companies[1]?.name || companies[0]?.name || 'Company Name', 2500, 'JazzCash', 'JC987654'],
+              ],
+            }}
+            notes={IMPORT_NOTES}
+            validate={validateImport}
+            create={async (payload, onError) => (await recordPayment(payload, { onError })) && money(payload.amount)}
+            preview={importPreview}
           />
         )}
       </Modal>

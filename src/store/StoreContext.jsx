@@ -194,8 +194,14 @@ export function StoreProvider({ children }) {
   // ---------- CRUD (null / false wapis = error, jo toast mein dikh jata hai) ----------
 
   const add = useCallback(
-    async (table, item) => {
+    // onError diya ho to toast ki jagah error message wapis milta hai (bulk upload ke liye)
+    async (table, item, { onError } = {}) => {
       const { data: row, error } = await supabase.from(table).insert(item).select(SELECT[table] || '*').single()
+      if (error && onError) {
+        console.error(error)
+        onError(friendly(error))
+        return null
+      }
       if (error) return fail(error)
       const record = normalize(table, row)
       setData((d) => ({ ...d, [table]: [record, ...d[table]] }))

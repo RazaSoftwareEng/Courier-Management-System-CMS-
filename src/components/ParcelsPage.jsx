@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, Eye, RefreshCw, Printer, Truck, Check, Bike, Banknote } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Eye, RefreshCw, Printer, Truck, Check, Bike, Banknote, FileSpreadsheet } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { PARCEL_STATUSES, CITIES, COUNTRIES, DELIVERY_TYPES, deliveryCharges, deliveryType } from '../data/constants'
-import { money, date, dateTime, byId, receiverOf } from '../lib/utils'
+import { money, date, dateTime, byId, receiverOf, countBy } from '../lib/utils'
 import { RULES, LIMITS, check, checkNumber } from '../lib/validation'
 import DataTable from './DataTable'
 import { Modal, ConfirmDialog, StatusBadge, PageHeader, IconButton } from './ui'
@@ -24,7 +25,11 @@ export default function ParcelsPage({ companyId }) {
   const customerMap = useMemo(() => byId(customers), [customers])
   const companyMap = useMemo(() => byId(companies), [companies])
   const riderMap = useMemo(() => byId(riders), [riders])
-  const rows = useMemo(() => (companyId ? parcels.filter((p) => p.company_id === companyId) : parcels), [parcels, companyId])
+  const allRows = useMemo(() => (companyId ? parcels.filter((p) => p.company_id === companyId) : parcels), [parcels, companyId])
+  // Company ke liye upar status tabs (har status ki ginti ke saath)
+  const [tab, setTab] = useState('All')
+  const statusCounts = useMemo(() => countBy(allRows, 'status'), [allRows])
+  const rows = useMemo(() => (companyId && tab !== 'All' ? allRows.filter((p) => p.status === tab) : allRows), [allRows, companyId, tab])
 
   const riderCell = (label, r) => (
     <p className="text-xs">
@@ -92,7 +97,7 @@ export default function ParcelsPage({ companyId }) {
   ]
 
   const filters = [
-    { key: 'status', label: 'Status', options: PARCEL_STATUSES },
+    ...(!companyId ? [{ key: 'status', label: 'Status', options: PARCEL_STATUSES }] : []),
     { key: 'delivery_type', label: 'Type', options: DELIVERY_TYPES },
     ...(!companyId
       ? [
@@ -119,13 +124,37 @@ export default function ParcelsPage({ companyId }) {
   return (
     <div>
       <PageHeader
-        title="Parcels"
+        title={companyId ? 'Orders' : 'Parcels'}
         subtitle={companyId ? 'Parcel book karein; status admin aur riders update karte hain aur yahan live nazar aata hai' : 'Tamam companies ke parcels: riders aur status yahan se update karein'}
       >
+        {companyId && (
+          <Link to="/company/orders/import" className="btn-secondary">
+            <FileSpreadsheet size={16} /> Import Excel
+          </Link>
+        )}
         <button className="btn-primary" onClick={() => setForm({})}>
-          <Plus size={16} /> Book Parcel
+          <Plus size={16} /> {companyId ? 'Create Parcel' : 'Book Parcel'}
         </button>
       </PageHeader>
+
+      {companyId && (
+        <div className="-mt-2 mb-5 flex gap-7 overflow-x-auto border-b border-slate-200">
+          {['All', ...PARCEL_STATUSES].map((s) => {
+            const count = s === 'All' ? allRows.length : statusCounts[s] || 0
+            const active = tab === s
+            return (
+              <button
+                key={s}
+                onClick={() => setTab(s)}
+                className={`-mb-px flex shrink-0 items-start gap-1 whitespace-nowrap border-b-[3px] px-1 pb-2.5 pt-2 text-[15px] transition ${active ? 'border-indigo-600 font-medium text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+              >
+                {s}
+                {count > 0 && <span className="-mt-1.5 min-w-5 rounded-full bg-indigo-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">{count}</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -147,7 +176,7 @@ export default function ParcelsPage({ companyId }) {
         ]}
       />
 
-      <Modal open={!!form} title={form?.parcel ? `Edit Parcel ${form.parcel.tracking_id}` : 'Book New Parcel'} onClose={() => setForm(null)} size="lg">
+      <Modal open={!!form} title={form?.parcel ? `Edit Parcel ${form.parcel.tracking_id}` : companyId ? 'Create Parcel' : 'Book New Parcel'} onClose={() => setForm(null)} size="lg">
         {form && <ParcelForm parcel={form.parcel} companyId={companyId} onSubmit={save} onCancel={() => setForm(null)} />}
       </Modal>
 
@@ -409,7 +438,7 @@ function ParcelForm({ parcel, companyId, onSubmit, onCancel }) {
           Cancel
         </button>
         <button type="submit" className="btn-primary" disabled={busy}>
-          {busy ? 'Saving...' : parcel ? 'Save Changes' : 'Book Parcel'}
+          {busy ? 'Saving...' : parcel ? 'Save Changes' : companyId ? 'Create Parcel' : 'Book Parcel'}
         </button>
       </div>
     </form>

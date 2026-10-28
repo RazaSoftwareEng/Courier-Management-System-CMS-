@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, Building2, Users, Package, HandCoins, Wallet, Landmark, Settings as SettingsIcon, UserCircle, Loader2, Bike, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Package, HandCoins, Wallet, Landmark, Settings as SettingsIcon, Loader2, Bike, ClipboardList, PiggyBank, FileText } from 'lucide-react'
 import { useStore } from './store/StoreContext'
 import { supabaseConfigured } from './lib/supabase'
 import { homeFor } from './lib/utils'
@@ -19,8 +19,8 @@ import RiderParcels from './pages/rider/RiderParcels'
 import RiderReport from './pages/rider/RiderReport'
 import CompanyDashboard from './pages/company/CompanyDashboard'
 import CompanyBank from './pages/company/CompanyBank'
-import CompanyPaymentRequests from './pages/company/CompanyPaymentRequests'
-import CompanyProfile from './pages/company/CompanyProfile'
+import CompanyStatements from './pages/company/CompanyStatements'
+import CompanyBulkUpload from './pages/company/CompanyBulkUpload'
 
 
 function RequireRole({ role, children }) {
@@ -74,11 +74,16 @@ export default function App() {
 
   const companyNav = [
     { to: '/company', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/company/parcels', label: 'Parcels', icon: Package },
-    { to: '/company/customers', label: 'Customers', icon: Users },
-    { to: '/company/payment-requests', label: 'Payment Requests', icon: HandCoins },
-    { to: '/company/bank', label: 'Bank Details', icon: Landmark },
-    { to: '/company/profile', label: 'Profile', icon: UserCircle },
+    { to: '/company/orders', label: 'Orders', icon: Package },
+    {
+      to: '/company/finance',
+      label: 'Finance',
+      icon: PiggyBank,
+      children: [
+        { to: '/company/finance/statements', label: 'My Statements', icon: FileText },
+        { to: '/company/finance/account', label: 'Account Details', icon: Landmark },
+      ],
+    },
   ]
 
   const riderNav = [
@@ -114,16 +119,16 @@ export default function App() {
         path="/company"
         element={
           <RequireRole role="company">
-            <DashboardLayout nav={companyNav} title="Company Panel" userName={company?.owner_name} userRole={company?.name} />
+            <DashboardLayout nav={companyNav} variant="light" title="Company Panel" userName={company?.owner_name} userRole={company?.name} />
           </RequireRole>
         }
       >
         <Route index element={<CompanyDashboard />} />
-        <Route path="parcels" element={<ParcelsPage companyId={session?.company_id} />} />
-        <Route path="customers" element={<CustomersPage companyId={session?.company_id} />} />
-        <Route path="payment-requests" element={<CompanyPaymentRequests />} />
-        <Route path="bank" element={<CompanyBank />} />
-        <Route path="profile" element={<CompanyProfile />} />
+        <Route path="orders" element={<ParcelsPage companyId={session?.company_id} />} />
+        <Route path="orders/import" element={<CompanyBulkUpload />} />
+        <Route path="finance" element={<Navigate to="/company/finance/statements" replace />} />
+        <Route path="finance/statements" element={<CompanyStatements />} />
+        <Route path="finance/account" element={<CompanyBank />} />
       </Route>
 
       <Route
