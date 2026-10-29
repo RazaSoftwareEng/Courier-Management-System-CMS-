@@ -19,7 +19,7 @@ const normalize = (table, row) => {
   return { ...parcel, history }
 }
 
-const friendly = (error) => {
+export const friendly = (error) => {
   const msg = error?.message || 'Kuch ghalat ho gaya'
   if (msg.includes('Invalid login credentials')) return 'Email ya password ghalat hai'
   if (msg.includes('Email not confirmed')) return 'Email abhi confirm nahi hui'

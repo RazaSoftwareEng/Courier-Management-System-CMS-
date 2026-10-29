@@ -11,6 +11,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import Companies from './pages/admin/Companies'
 import PaymentRequests from './pages/admin/PaymentRequests'
 import Payments from './pages/admin/Payments'
+import Statements from './pages/admin/Statements'
 import BankAccounts from './pages/admin/BankAccounts'
 import Settings from './pages/admin/Settings'
 import Riders from './pages/admin/Riders'
@@ -66,6 +67,7 @@ export default function App() {
     { to: '/admin/parcels', label: 'Parcels', icon: Package },
     { to: '/admin/payment-requests', label: 'Payment Requests', icon: HandCoins, badge: pendingCount },
     { to: '/admin/payments', label: 'Payments', icon: Wallet },
+    { to: '/admin/statements', label: 'Statements', icon: FileText },
     { to: '/admin/riders', label: 'Riders', icon: Bike },
     { to: '/admin/banks', label: 'Bank Accounts', icon: Landmark },
     { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
@@ -108,6 +110,7 @@ export default function App() {
         <Route path="parcels" element={<ParcelsPage />} />
         <Route path="payment-requests" element={<PaymentRequests />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="statements" element={<Statements />} />
         <Route path="riders" element={<Riders />} />
         <Route path="banks" element={<BankAccounts />} />
         <Route path="settings" element={<Settings />} />

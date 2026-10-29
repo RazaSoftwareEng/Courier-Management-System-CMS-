@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Download, UploadCloud, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Trash2 } from 'lucide-react'
+import { Download, UploadCloud, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Trash2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { Section } from './ui'
 
@@ -21,9 +21,9 @@ export const num = (v) => String(v ?? '').replace(/,/g, '')
 
 // columns: [{ key, label, required?, width?, aliases?, text? }]  (text: Excel mein text format, jaise phone)
 // notes: Instructions sheet ki rows [[column, required, note], ...]
-async function downloadTemplate({ filename, sheetName, columns, sampleRows, notes }) {
+async function downloadTemplate({ filename, sheetName, columns, sampleRows, notes, markRequired = true }) {
   const XLSX = await import('xlsx')
-  const header = columns.map((c) => (c.required ? `${c.label} *` : c.label))
+  const header = columns.map((c) => (c.required && markRequired ? `${c.label} *` : c.label))
   const sheet = XLSX.utils.aoa_to_sheet([header, ...sampleRows])
   sheet['!cols'] = columns.map((c) => ({ wch: c.width || 16 }))
   columns.forEach((c, ci) => {
@@ -38,7 +38,7 @@ async function downloadTemplate({ filename, sheetName, columns, sampleRows, note
     ['Column', 'Required', 'Notes'],
     ...notes,
     [],
-    ['', '', `Ek file mein zyada se zyada ${MAX_ROWS} rows. Sample rows delete karke apna data likhein.`],
+    ['', '', 'Sample rows delete karke apna data likhein.'],
   ])
   help['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 70 }]
 
@@ -71,8 +71,13 @@ async function readSheet(file, columns, sheetName) {
 // Excel se bulk import: sample download -> file upload -> har row check -> sahi rows save
 // validate(raw) -> { payload, errors }
 // create(payload, onError) -> label (jaise tracking ID) ya null agar fail
+// saveAll(rows) -> [{ ok, label } | { ok: false, error }] har row ke liye (create ki jagah, ek saath save)
 // preview: [{ label, align?, render(row) }]  row = { raw, payload, errors }
-export default function BulkImport({ noun, columns, sheetName, template, notes, validate, create, preview, onDone }) {
+// checkRows(rows) -> rows: poori file par check (jaise duplicate rows); summary(rows) -> preview ke upar note
+// validate warnings bhi de sakta hai: row save hoti hai, sirf woh field skip (orange note); errors wali row skip hoti hai
+const PREVIEW_LIMIT = 300
+
+export default function BulkImport({ noun, columns, sheetName, template, notes, validate, create, saveAll, preview, onDone, maxRows = MAX_ROWS, disabled, hint, disableSample, markRequired, checkRows, summary }) {
   const { notify } = useStore()
   const inputRef = useRef(null)
   const [file, setFile] = useState(null)
@@ -100,9 +105,10 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
       const { missing, rows: parsed } = await readSheet(f, columns, sheetName)
       if (missing.length) return notify(`Sheet mein ye columns nahi mile: ${missing.join(', ')}. Sample file use karein.`, 'error')
       if (!parsed.length) return notify(`Sheet mein koi ${noun} nahi mila`, 'error')
-      if (parsed.length > MAX_ROWS) return notify(`Ek file mein zyada se zyada ${MAX_ROWS} rows`, 'error')
+      if (parsed.length > maxRows) return notify(`Ek file mein zyada se zyada ${maxRows} rows`, 'error')
       setFile(f)
-      setRows(parsed.map((r) => ({ ...r, ...validate(r.raw) })))
+      const checked = parsed.map((r) => ({ ...r, ...validate(r.raw) }))
+      setRows(checkRows ? checkRows(checked) : checked)
     } catch {
       notify('File parhi nahi ja saki — sahi Excel file select karein', 'error')
     } finally {
@@ -116,6 +122,16 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
     const queue = valid
     setUploading({ done: 0, total: queue.length })
     let ok = 0
+    if (saveAll) {
+      const results = await saveAll(queue)
+      const byLine = new Map(queue.map((row, i) => [row.line, results[i]]))
+      ok = results.filter((r) => r.ok).length
+      setRows((all) => all.map((r) => (byLine.has(r.line) ? { ...r, result: byLine.get(r.line) } : r)))
+      setUploading(null)
+      notify(`${ok} ${noun} save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}${invalid ? `, ${invalid} skip` : ''}`, ok < queue.length ? 'error' : undefined)
+      if (ok && onDone) onDone(ok)
+      return
+    }
     for (const [i, row] of queue.entries()) {
       let error = 'Save nahi hua'
       const label = await create(row.payload, (msg) => (error = msg))
@@ -124,11 +140,17 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
       setUploading({ done: i + 1, total: queue.length })
     }
     setUploading(null)
-    notify(`${ok} ${noun} save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}`, ok < queue.length ? 'error' : undefined)
+    notify(`${ok} ${noun} save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}${invalid ? `, ${invalid} skip` : ''}`, ok < queue.length ? 'error' : undefined)
     if (ok && onDone) onDone(ok)
   }
 
   const retrying = rows.some((r) => r.result && !r.result.ok)
+  const warned = rows.filter((r) => !r.errors.length && r.warnings?.length).length
+  // Bari file mein pehle ghalat rows, aur sirf pehli PREVIEW_LIMIT rows dikhayi jati hain
+  const shown = useMemo(() => {
+    const bad = (r) => r.errors.length || (r.result && !r.result.ok)
+    return (rows.length > PREVIEW_LIMIT ? [...rows].sort((a, b) => !!bad(b) - !!bad(a)) : rows).slice(0, PREVIEW_LIMIT)
+  }, [rows])
 
   return (
     <div className="space-y-5">
@@ -137,10 +159,12 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white">1</span>
           <div className="flex-1">
             <p className="font-semibold text-slate-900">Sample file download karein</p>
-            <p className="mt-1 text-sm text-slate-500">Sample sheet mein apna data likhein. Har row ek {noun} hai; * wale columns zaroori hain.</p>
+            <p className="mt-1 text-sm text-slate-500">Sample sheet mein apna data likhein. Har row ek {noun} hai; zaroori columns Instructions sheet mein likhe hain.</p>
             <button
               className="btn-secondary mt-3"
-              onClick={() => downloadTemplate({ ...template, sheetName, columns, notes }).catch(() => notify('Sample file nahi ban saki', 'error'))}
+              disabled={disableSample}
+              title={disableSample ? hint : undefined}
+              onClick={() => downloadTemplate({ ...template, sheetName, columns, notes, markRequired }).catch(() => notify('Sample file nahi ban saki', 'error'))}
             >
               <Download size={16} /> Download Sample (.xlsx)
             </button>
@@ -164,14 +188,14 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
         onDrop={(e) => {
           e.preventDefault()
           setDragging(false)
-          load(e.dataTransfer.files?.[0])
+          if (!disabled) load(e.dataTransfer.files?.[0])
         }}
-        className={`card flex cursor-pointer flex-col items-center justify-center border-2 border-dashed p-8 text-center transition ${dragging ? 'border-indigo-500 bg-indigo-50' : 'border-slate-300 hover:border-indigo-400'}`}
+        className={`card flex flex-col items-center justify-center border-2 border-dashed p-8 text-center transition ${disabled ? 'cursor-not-allowed border-slate-200 opacity-60' : dragging ? 'cursor-pointer border-indigo-500 bg-indigo-50' : 'cursor-pointer border-slate-300 hover:border-indigo-400'}`}
       >
-        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={reading || !!uploading} onChange={(e) => load(e.target.files?.[0])} />
+        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={disabled || reading || !!uploading} onChange={(e) => load(e.target.files?.[0])} />
         {reading ? <Loader2 size={36} className="animate-spin text-indigo-600" /> : <UploadCloud size={36} className="text-indigo-500" />}
-        <p className="mt-3 font-medium text-slate-800">{reading ? 'File check ho rahi hai...' : 'File yahan drop karein ya click karke select karein'}</p>
-        <p className="mt-1 text-xs text-slate-400">.xlsx, .xls ya .csv · zyada se zyada {MAX_ROWS} rows</p>
+        <p className="mt-3 font-medium text-slate-800">{reading ? 'File check ho rahi hai...' : disabled ? hint : 'File yahan drop karein ya click karke select karein'}</p>
+        <p className="mt-1 text-xs text-slate-400">.xlsx, .xls ya .csv · zyada se zyada {maxRows.toLocaleString()} rows</p>
       </label>
 
       {file && (
@@ -193,10 +217,20 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
             </div>
           }
         >
+          {summary?.(rows)}
+          {invalid > 0 && !created && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>
+                {invalid} row(s) skip hongi (wajah neeche likhi hai). Baqi {valid.length} rows save hongi.
+              </span>
+            </div>
+          )}
           <div className="mb-4 flex flex-wrap gap-2 text-sm">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Total rows: {rows.length}</span>
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Ready: {valid.length}</span>
-            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">Errors: {invalid}</span>
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">Skipped: {invalid}</span>
+            {warned > 0 && <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">Fields skipped: {warned} rows</span>}
             {failed > 0 && <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">Failed: {failed}</span>}
             {created > 0 && <span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-700">Saved: {created}</span>}
           </div>
@@ -215,7 +249,7 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => (
+                {shown.map((r) => (
                   <tr key={r.line} className={r.errors.length || (r.result && !r.result.ok) ? 'bg-rose-50/40' : ''}>
                     <td className="px-3 py-2.5 text-slate-400">{r.line}</td>
                     {preview.map((c) => (
@@ -241,12 +275,26 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
                           <CheckCircle2 size={15} /> Ready
                         </span>
                       )}
+                      {!r.errors.length && r.warnings?.length > 0 && (
+                        <ul className="mt-1 space-y-0.5 text-xs text-amber-700">
+                          {r.warnings.map((w) => (
+                            <li key={w} className="flex items-start gap-1">
+                              <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {w}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {rows.length > shown.length && (
+            <p className="mt-3 text-xs text-slate-400">
+              Pehli {shown.length} rows dikh rahi hain (ghalat rows sab se upar) — total {rows.length}
+            </p>
+          )}
         </Section>
       )}
     </div>

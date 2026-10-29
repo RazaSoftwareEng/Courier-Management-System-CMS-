@@ -1,14 +1,18 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { Search, CalendarDays, Copy, Download, FileText, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useStore } from '../../store/StoreContext'
+import { useStore, friendly } from '../../store/StoreContext'
 import { downloadCsv, byId, receiverOf } from '../../lib/utils'
 import { StatusBadge } from '../../components/ui'
+import { downloadStatementSheet } from '../../data/statementColumns'
+import { fetchStatements, fetchLines } from '../../lib/statements'
+import { supabase } from '../../lib/supabase'
 
 // ---------- Statements backend data se ----------
-// Net-off: har hafte (Mon–Sun) ke Delivered/Returned parcels ka hisaab (COD, charges, commission)
+// Net-off: admin ki upload ki hui statements (statements / statement_lines tables)
 // Payout: admin ki taraf se company ko ki gayi har payment
 
 const STATEMENT_TYPES = ['Net-off Statement', 'Payout Statement']
+const ALL_TYPES = 'All Statements'
 
 const pad = (n) => String(n).padStart(2, '0')
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -35,7 +39,6 @@ function settledParcels(parcels, companyId, commissionRate) {
       return {
         ...p,
         at,
-        statement: `NETOFF-${compact(weekStart(at))}`,
         cod,
         delivery,
         commission,
@@ -46,33 +49,19 @@ function settledParcels(parcels, companyId, commissionRate) {
     .sort((a, b) => b.at - a.at)
 }
 
-function netOffStatements(settled) {
-  const weeks = {}
-  settled.forEach((p) => {
-    const start = weekStart(p.at)
-    ;(weeks[ymd(start)] ||= { start, rows: [] }).rows.push(p)
-  })
-  return Object.entries(weeks)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([key, { start, rows }]) => {
-      const end = new Date(start)
-      end.setDate(start.getDate() + 6)
-      const total = (k) => round2(rows.reduce((t, r) => t + r[k], 0))
-      return {
-        id: `n-${key}`,
-        type: STATEMENT_TYPES[0],
-        start: key,
-        end: ymd(end),
-        number: `NETOFF-${compact(start)}`,
-        parcels: rows.length,
-        cod: total('cod'),
-        delivery: total('delivery'),
-        commission: total('commission'),
-        fees: total('fees'),
-        net: total('net'),
-      }
-    })
-}
+const uploadedStatement = (u) => ({
+  id: `u-${u.id}`,
+  uploadedId: u.id,
+  type: STATEMENT_TYPES[0],
+  start: u.period_start,
+  end: u.period_end,
+  number: u.statement_number,
+  parcels: u.line_count,
+  cod: Number(u.cod_total),
+  fees: Number(u.fees_total),
+  net: Number(u.payable_total),
+  status: u.status || 'Pending',
+})
 
 // Har payout ka period: pichli payout ke agle din se is payout tak
 function payoutStatements(payments, companyId, since) {
@@ -116,8 +105,6 @@ function openInvoice(s, company) {
     : [
         text('Parcels in statement', s.parcels),
         line('COD collected', s.cod),
-        line('Delivery charges', s.delivery),
-        line('Commission', s.commission),
         rule,
         line('Total fees', s.fees, true),
         line('Net payable', s.net, true),
@@ -159,9 +146,9 @@ function SeeMore({ s }) {
     : [
         ['Parcels', s.parcels, true],
         ['COD Collected', s.cod],
-        ['Delivery Charges', s.delivery],
-        ['Commission', s.commission],
+        ['Total Fees', s.fees],
         ['Net Payable', s.net],
+        ['Status', s.status, true],
       ]
 
   return (
@@ -184,7 +171,8 @@ function SeeMore({ s }) {
 }
 
 function Pagination({ total, page, pages, pageSize, setPage, setPageSize }) {
-  const btn = 'inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:text-slate-300'
+  const base = 'inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:text-slate-300'
+  const btn = `${base} border-slate-200 bg-white`
   return (
     <div className="flex flex-wrap items-center gap-2 pt-4 text-sm text-slate-600">
       <span>Total {total}</span>
@@ -199,7 +187,7 @@ function Pagination({ total, page, pages, pageSize, setPage, setPageSize }) {
         <ChevronLeft size={16} /> Previous
       </button>
       {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
-        <button key={n} className={`${btn} ${n === page ? 'border-indigo-600 bg-indigo-600 text-white' : ''}`} onClick={() => setPage(n)}>
+        <button key={n} className={n === page ? `${base} border-indigo-600 bg-indigo-600 font-medium text-white` : `${btn} hover:bg-slate-50`} onClick={() => setPage(n)}>
           {n}
         </button>
       ))}
@@ -222,14 +210,54 @@ function usePaged(rows) {
   }
 }
 
+// Statement download: har parcel ki ek row (seller-center statement jaisa format)
+const PROVINCES = {
+  Punjab: ['lahore', 'rawalpindi', 'faisalabad', 'multan', 'sialkot', 'gujranwala', 'bahawalpur', 'sargodha', 'sheikhupura', 'gujrat', 'sahiwal', 'okara', 'kasur'],
+  Sindh: ['karachi', 'hyderabad', 'sukkur', 'larkana', 'nawabshah', 'mirpur khas'],
+  'Khyber Pakhtunkhwa': ['peshawar', 'mardan', 'abbottabad', 'swat', 'kohat', 'dera ismail khan', 'mingora'],
+  Balochistan: ['quetta', 'gwadar', 'turbat', 'khuzdar'],
+  'Islamabad Capital Territory': ['islamabad'],
+  'Gilgit-Baltistan': ['gilgit', 'skardu'],
+  'Azad Kashmir': ['muzaffarabad', 'mirpur'],
+}
+const provinceOf = (p) => {
+  if (p.destination_country && p.destination_country !== 'Pakistan') return p.destination_country
+  const city = (p.city || '').trim().toLowerCase()
+  return Object.keys(PROVINCES).find((k) => PROVINCES[k].includes(city)) || ''
+}
+const dateTimeText = (iso) => (iso ? `${ymd(new Date(iso))} ${new Date(iso).toTimeString().slice(0, 5)}` : '')
+
+// Parcel -> statement line (payout statement download ke liye, uploaded lines jaisi shakal)
+const parcelToLine = (p, ctx) => ({
+  tracking_no: p.tracking_id,
+  original_tracking_no: p.tracking_id,
+  warehouse_name: ctx.warehouse,
+  order_type: p.delivery_type || 'Local',
+  order_no: p.id.slice(0, 8).toUpperCase(),
+  external_order_no: '',
+  order_created_at: dateTimeText(p.created_at),
+  final_status_at: dateTimeText(p.at),
+  buyer_name: receiverOf(p, ctx.customerMap).name,
+  buyer_phone: receiverOf(p, ctx.customerMap).phone,
+  buyer_province: provinceOf(p),
+  dead_weight: `${Number(p.weight) || 0}`,
+  billing_weight: `${Math.ceil(Number(p.weight) || 0)}`,
+  payment_method: Number(p.cod_amount) > 0 ? 'COD' : 'Prepaid',
+  final_status: p.status,
+  cod_amount: p.cod,
+  cod_surcharge_fee: p.commission,
+  shipping_fee: p.status === 'Delivered' ? p.delivery : 0,
+  return_shipping_fee: p.status === 'Returned' ? p.delivery : 0,
+  payable_amount: p.net,
+  note: p.description || '',
+})
+
 const statementColumns = [
   { key: 'period', label: 'Statement Period', csv: (r) => `${r.start} - ${r.end}` },
   { key: 'number', label: 'Statement No.' },
   { key: 'type', label: 'Type' },
   { key: 'parcels', label: 'Parcels' },
   { key: 'cod', label: 'COD Collected' },
-  { key: 'delivery', label: 'Delivery Charges' },
-  { key: 'commission', label: 'Commission' },
   { key: 'fees', label: 'Total' },
   { key: 'net', label: 'Net Payable' },
   { key: 'method', label: 'Method' },
@@ -243,24 +271,49 @@ export default function CompanyStatements() {
   const commissionRate = (settings?.commission_percent || 0) / 100
 
   const packages = useMemo(() => settledParcels(parcels, session.company_id, commissionRate), [parcels, session.company_id, commissionRate])
+  const [uploaded, setUploaded] = useState([])
+  // Admin nayi statement upload kare to page khud refresh ho (realtime + tab par wapis aane par)
+  useEffect(() => {
+    const load = () =>
+      fetchStatements(session.company_id)
+        .then(setUploaded)
+        .catch((e) => notify(friendly(e), 'error'))
+    load()
+    const channel = supabase
+      .channel('company-statements')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'statements' }, load)
+      .subscribe()
+    const onFocus = () => document.visibilityState === 'visible' && load()
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      supabase.removeChannel(channel)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [session.company_id, notify])
+
   const statements = useMemo(() => {
     const since = packages.length ? weekStart(packages[packages.length - 1].at) : company?.created_at ? new Date(company.created_at) : null
-    return [...netOffStatements(packages), ...payoutStatements(payments, session.company_id, since)]
-  }, [packages, payments, session.company_id, company?.created_at])
+    return [...uploaded.map(uploadedStatement), ...payoutStatements(payments, session.company_id, since)]
+  }, [uploaded, packages, payments, session.company_id, company?.created_at])
 
   const [tab, setTab] = useState('statements')
-  const [type, setType] = useState(STATEMENT_TYPES[0])
+  const [type, setType] = useState(ALL_TYPES)
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const isPayout = type === STATEMENT_TYPES[1]
+  const isAll = type === ALL_TYPES
+  const typeCounts = useMemo(
+    () => statements.reduce((acc, s) => ({ ...acc, [s.type]: (acc[s.type] || 0) + 1 }), { [ALL_TYPES]: statements.length }),
+    [statements],
+  )
 
   const filtered = useMemo(
     () =>
       statements.filter(
         (s) =>
-          s.type === type &&
+          (isAll || s.type === type) &&
           (!applied || s.number.toLowerCase().includes(applied.toLowerCase())) &&
           (!from || s.end >= from) &&
           (!to || s.start <= to),
@@ -278,6 +331,18 @@ export default function CompanyStatements() {
       notify('Statement number copy ho gaya')
     } catch {
       notify('Copy nahi ho saka', 'error')
+    }
+  }
+
+  // Net-off: admin ki upload ki hui lines; Payout: payout period mein settle hue parcels
+  const download = async (s) => {
+    try {
+      if (s.uploadedId) return await downloadStatementSheet(s, await fetchLines(s.uploadedId))
+      const ctx = { customerMap, warehouse: `${settings?.hub_city || 'Lahore'} Head Office` }
+      const rows = packages.filter((p) => ymd(p.at) >= s.start && ymd(p.at) <= s.end).sort((a, b) => a.at - b.at)
+      await downloadStatementSheet(s, rows.map((p) => parcelToLine(p, ctx)))
+    } catch (e) {
+      notify(friendly(e), 'error')
     }
   }
 
@@ -308,8 +373,10 @@ export default function CompanyStatements() {
             <label className="flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm">
               <span className="whitespace-nowrap text-slate-600">Statement Type:</span>
               <select className="bg-transparent font-medium text-slate-900 outline-none" value={type} onChange={(e) => setType(e.target.value)}>
-                {STATEMENT_TYPES.map((t) => (
-                  <option key={t}>{t}</option>
+                {[ALL_TYPES, ...STATEMENT_TYPES].map((t) => (
+                  <option key={t} value={t}>
+                    {t} ({typeCounts[t] || 0})
+                  </option>
                 ))}
               </select>
             </label>
@@ -352,7 +419,7 @@ export default function CompanyStatements() {
                   <tr className="bg-slate-50 text-left font-semibold text-slate-700">
                     <th className="rounded-l-md px-4 py-3">Statement Period</th>
                     <th className="px-4 py-3">Statement No.</th>
-                    <th className="px-4 py-3 text-right">{isPayout ? 'Amount Paid' : 'Total Fees'}</th>
+                    <th className="px-4 py-3 text-right">{isAll ? 'Amount' : isPayout ? 'Amount Paid' : 'Total Fees'}</th>
                     <th className="rounded-r-md px-4 py-3 text-center">Action</th>
                   </tr>
                 </thead>
@@ -367,16 +434,31 @@ export default function CompanyStatements() {
                         <button className="ml-1.5 align-middle text-indigo-500 hover:text-indigo-700" title="Copy" onClick={() => copy(s.number)}>
                           <Copy size={14} />
                         </button>
+                        {(isAll || s.status) && (
+                          <span className="mt-1 flex items-center gap-1.5">
+                            {isAll && (
+                              <span className={`w-fit rounded-full px-2 text-[11px] font-medium ${s.method ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700'}`}>
+                                {s.type}
+                              </span>
+                            )}
+                            {s.status && (
+                              <span className={`w-fit rounded-full px-2 text-[11px] font-medium ${s.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                                {s.status}
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right">
                         <span className="text-slate-500">PKR</span> <span className="font-semibold text-slate-900">{pkr(s.fees)}</span>
+                        {isAll && <span className="block text-[11px] text-slate-400">{s.method ? 'Amount Paid' : 'Total Fees'}</span>}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-center gap-4">
                           <button
                             className="text-indigo-600 hover:text-indigo-800"
-                            title="Download statement (CSV)"
-                            onClick={() => downloadCsv(`${s.number}.csv`, statementColumns, [s])}
+                            title="Download statement (Excel)"
+                            onClick={() => download(s)}
                           >
                             <Download size={16} />
                           </button>
@@ -394,7 +476,7 @@ export default function CompanyStatements() {
                   {visible.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-10 text-center text-slate-400">
-                        {isPayout ? 'Abhi tak koi payout nahi hua' : 'Abhi koi delivered/returned parcel nahi'}
+                        {isAll ? 'Koi statement nahi mili' : isPayout ? 'Abhi tak koi payout nahi hua' : 'Abhi tak koi statement upload nahi hui'}
                       </td>
                     </tr>
                   )}
@@ -407,11 +489,10 @@ export default function CompanyStatements() {
       ) : (
         <div className="card p-4 sm:p-5">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left font-semibold text-slate-700">
                   <th className="rounded-l-md px-4 py-3">Tracking ID</th>
-                  <th className="px-4 py-3">Statement No.</th>
                   <th className="px-4 py-3">Receiver</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Date</th>
@@ -424,7 +505,6 @@ export default function CompanyStatements() {
                 {pkgPaged.visible.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-3.5 font-mono font-medium text-indigo-600">{p.tracking_id}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{p.statement}</td>
                     <td className="px-4 py-3.5 text-slate-600">{receiverOf(p, customerMap).name || '-'}</td>
                     <td className="px-4 py-3.5">
                       <StatusBadge status={p.status} />
@@ -437,7 +517,7 @@ export default function CompanyStatements() {
                 ))}
                 {pkgPaged.visible.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center text-slate-400">
+                    <td colSpan={7} className="py-10 text-center text-slate-400">
                       Abhi koi delivered/returned parcel nahi
                     </td>
                   </tr>
