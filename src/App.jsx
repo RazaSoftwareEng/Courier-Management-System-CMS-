@@ -1,27 +1,16 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { LayoutDashboard, Building2, Users, Package, HandCoins, Wallet, Landmark, Settings as SettingsIcon, Loader2, Bike, ClipboardList, PiggyBank, FileText } from 'lucide-react'
+import { LayoutDashboard, Users, Wallet, Landmark, Loader2, PiggyBank, FileText } from 'lucide-react'
 import { useStore } from './store/StoreContext'
 import { supabaseConfigured } from './lib/supabase'
 import { homeFor } from './lib/utils'
 import DashboardLayout from './layouts/DashboardLayout'
 import Login from './pages/Login'
-import ParcelsPage from './components/ParcelsPage'
-import CustomersPage from './components/CustomersPage'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import Companies from './pages/admin/Companies'
-import PaymentRequests from './pages/admin/PaymentRequests'
 import Payments from './pages/admin/Payments'
-import Statements from './pages/admin/Statements'
-import BankAccounts from './pages/admin/BankAccounts'
-import Settings from './pages/admin/Settings'
-import Riders from './pages/admin/Riders'
-import RiderDashboard from './pages/rider/RiderDashboard'
-import RiderParcels from './pages/rider/RiderParcels'
-import RiderReport from './pages/rider/RiderReport'
+import CompanyDashboard from './pages/company/CompanyDashboard'
 import CompanyBank from './pages/company/CompanyBank'
 import CompanyStatements from './pages/company/CompanyStatements'
-import CompanyBulkUpload from './pages/company/CompanyBulkUpload'
-
 
 function RequireRole({ role, children }) {
   const { session } = useStore()
@@ -33,8 +22,27 @@ function FullScreen({ children }) {
   return <div className="flex min-h-screen items-center justify-center p-4 text-center text-slate-500">{children}</div>
 }
 
+const adminNav = [
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/admin/customers', label: 'Customer Profile', icon: Users },
+  { to: '/admin/payments', label: 'Payments', icon: Wallet },
+]
+
+const companyNav = [
+  { to: '/company', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  {
+    to: '/company/finance',
+    label: 'Finance',
+    icon: PiggyBank,
+    children: [
+      { to: '/company/finance/statements', label: 'My Statements', icon: FileText },
+      { to: '/company/finance/account', label: 'Account Details', icon: Landmark },
+    ],
+  },
+]
+
 export default function App() {
-  const { session, authLoading, companies, payment_requests } = useStore()
+  const { session, authLoading, companies } = useStore()
 
   if (!supabaseConfigured) {
     return (
@@ -57,40 +65,7 @@ export default function App() {
     )
   }
 
-  const pendingCount = payment_requests.filter((r) => r.status === 'Pending').length
   const company = companies.find((c) => c.id === session?.company_id)
-
-  const adminNav = [
-    { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/admin/companies', label: 'Companies', icon: Building2 },
-    { to: '/admin/customers', label: 'Customers', icon: Users },
-    { to: '/admin/parcels', label: 'Parcels', icon: Package },
-    { to: '/admin/payment-requests', label: 'Payment Requests', icon: HandCoins, badge: pendingCount },
-    { to: '/admin/payments', label: 'Payments', icon: Wallet },
-    { to: '/admin/statements', label: 'Statements', icon: FileText },
-    { to: '/admin/riders', label: 'Riders', icon: Bike },
-    { to: '/admin/banks', label: 'Bank Accounts', icon: Landmark },
-    { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
-  ]
-
-  // Filhaal company ko sirf Finance dikhaya ja raha hai
-  const companyNav = [
-    {
-      to: '/company/finance',
-      label: 'Finance',
-      icon: PiggyBank,
-      children: [
-        { to: '/company/finance/statements', label: 'My Statements', icon: FileText },
-        { to: '/company/finance/account', label: 'Account Details', icon: Landmark },
-      ],
-    },
-  ]
-
-  const riderNav = [
-    { to: '/rider', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/rider/parcels', label: 'My Parcels', icon: Package },
-    { to: '/rider/report', label: 'Daily Report', icon: ClipboardList },
-  ]
 
   return (
     <Routes>
@@ -105,15 +80,8 @@ export default function App() {
         }
       >
         <Route index element={<AdminDashboard />} />
-        <Route path="companies" element={<Companies />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="parcels" element={<ParcelsPage />} />
-        <Route path="payment-requests" element={<PaymentRequests />} />
+        <Route path="customers" element={<Companies />} />
         <Route path="payments" element={<Payments />} />
-        <Route path="statements" element={<Statements />} />
-        <Route path="riders" element={<Riders />} />
-        <Route path="banks" element={<BankAccounts />} />
-        <Route path="settings" element={<Settings />} />
       </Route>
 
       <Route
@@ -124,25 +92,10 @@ export default function App() {
           </RequireRole>
         }
       >
-        <Route index element={<Navigate to="/company/finance/statements" replace />} />
-        <Route path="orders" element={<ParcelsPage companyId={session?.company_id} />} />
-        <Route path="orders/import" element={<CompanyBulkUpload />} />
+        <Route index element={<CompanyDashboard />} />
         <Route path="finance" element={<Navigate to="/company/finance/statements" replace />} />
         <Route path="finance/statements" element={<CompanyStatements />} />
         <Route path="finance/account" element={<CompanyBank />} />
-      </Route>
-
-      <Route
-        path="/rider"
-        element={
-          <RequireRole role="rider">
-            <DashboardLayout nav={riderNav} title="Rider Panel" userName={session?.name} userRole="Rider" />
-          </RequireRole>
-        }
-      >
-        <Route index element={<RiderDashboard />} />
-        <Route path="parcels" element={<RiderParcels />} />
-        <Route path="report" element={<RiderReport />} />
       </Route>
 
       <Route path="*" element={<Navigate to={session ? homeFor(session.role) : '/login'} replace />} />

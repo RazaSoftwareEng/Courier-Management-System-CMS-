@@ -57,7 +57,7 @@ export default function Login() {
         <form onSubmit={submit} className="card space-y-5 p-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Sign in</h2>
-            <p className="text-sm text-slate-500">Admin, company aur rider sab isi form se login karein</p>
+            <p className="text-sm text-slate-500">Admin aur company isi form se login karein</p>
           </div>
 
           <label className="block">

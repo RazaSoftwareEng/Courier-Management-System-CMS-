@@ -1,116 +1,139 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Building2, Users, Package, Wallet, HandCoins, CheckCircle2, Truck, Banknote } from 'lucide-react'
+import { Users, FileText, Banknote, Receipt, Wallet, BadgeCheck, Clock, Hourglass, ArrowRight } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
-import { ACTIVE_STATUSES } from '../../data/constants'
-import { StatCard, PageHeader, Section, StatusBadge } from '../../components/ui'
-import { ParcelsBarChart, RevenueAreaChart, StatusDonut } from '../../components/Charts'
-import { money, sum, countBy, monthlySeries, isToday, byId, date } from '../../lib/utils'
+import { useStatements } from '../../lib/useStatements'
+import { money, date, sum, byId, companyBalances } from '../../lib/utils'
+import { StatCard, Section, StatusBadge } from '../../components/ui'
+import WelcomeBanner from '../../components/WelcomeBanner'
+
+// Profile mein naam na ho to session.name email hota hai
+const displayName = (name) => (!name || name.includes('@') ? 'Super Admin' : name)
+
+const isPending = (s) => (s.status || 'Pending') === 'Pending'
 
 export default function AdminDashboard() {
-  const { companies, customers, parcels, payment_requests, payments } = useStore()
+  const { session, companies, payments } = useStore()
+  const statements = useStatements()
 
-  const stats = useMemo(() => {
-    const delivered = parcels.filter((p) => p.status === 'Delivered')
-    return {
-      revenue: sum(parcels.filter((p) => p.status === 'Delivered' || p.status === 'Returned'), 'delivery_charges'),
-      cod: sum(delivered, 'cod_amount'),
-      paidOut: sum(payments, 'amount'),
-      pendingReqs: payment_requests.filter((r) => r.status === 'Pending'),
-      deliveredToday: parcels.filter((p) => p.status === 'Delivered' && p.history?.some((h) => h.status === 'Delivered' && isToday(h.at))).length,
-      inTransit: parcels.filter((p) => ACTIVE_STATUSES.includes(p.status) && p.status !== 'Booked').length,
-      atHub: parcels.filter((p) => p.status === 'At Head Office').length,
-    }
-  }, [parcels, payments, payment_requests])
-
-  const series = useMemo(() => monthlySeries(parcels), [parcels])
-  const counts = useMemo(() => countBy(parcels, 'status'), [parcels])
+  const list = statements || []
   const companyMap = useMemo(() => byId(companies), [companies])
+  const balances = useMemo(() => companyBalances(companies, list, payments), [companies, statements, payments]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const topCompanies = useMemo(() => {
-    const c = countBy(parcels, 'company_id')
-    return companies
-      .map((co) => ({ ...co, parcels: c[co.id] || 0 }))
-      .sort((a, b) => b.parcels - a.parcels)
-      .slice(0, 5)
-  }, [companies, parcels])
+  const pending = list.filter(isPending)
+  const cod = sum(list, 'cod_total')
+  const payable = sum(list, 'payable_total')
+  const value = (v) => (statements ? v : '...')
+
+  const cards = [
+    { label: 'Total Customers', value: companies.length, icon: Users, hint: `${companies.filter((c) => c.status === 'Active').length} active` },
+    { label: 'Statements', value: value(list.length), icon: FileText, tone: 'sky', hint: `${pending.length} pending` },
+    { label: 'Total COD', value: value(money(cod)), icon: Banknote, tone: 'sky', hint: 'Statements ka COD' },
+    { label: 'Fees & Deductions', value: value(money(cod - payable)), icon: Receipt, tone: 'slate', hint: 'COD minus payable' },
+    { label: 'Total Payable', value: value(money(payable)), icon: Wallet, hint: 'Sab statements ka' },
+    { label: 'Total Paid Out', value: money(sum(payments, 'amount')), icon: BadgeCheck, tone: 'emerald', hint: `${payments.length} payments` },
+    { label: 'Pending Payment', value: value(money(sum(pending, 'payable_total'))), icon: Clock, tone: 'amber', hint: 'Abhi dena baqi hai' },
+    { label: 'Pending Statements', value: value(pending.length), icon: Hourglass, tone: 'amber', hint: 'Mark Paid baqi' },
+  ]
+
+  const viewAll = (
+    <Link to="/admin/payments" className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline">
+      View all <ArrowRight size={14} />
+    </Link>
+  )
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" subtitle="Poore system ka overview" />
+      <WelcomeBanner name={displayName(session.name)} subtitle="Aapke payments aur statements ka poora khulasa">
+        <Link to="/admin/payments" className="btn bg-white text-indigo-700 hover:bg-indigo-50">
+          <Wallet size={16} /> Payments
+        </Link>
+        <Link to="/admin/customers" className="btn border border-white/30 text-white hover:bg-white/10">
+          <Users size={16} /> Customer Profile
+        </Link>
+      </WelcomeBanner>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Total Companies" value={companies.length} icon={Building2} hint={`${companies.filter((c) => c.status === 'Active').length} active`} />
-        <StatCard label="Total Customers" value={customers.length} icon={Users} tone="sky" />
-        <StatCard label="Total Parcels" value={parcels.length} icon={Package} tone="slate" hint={`${stats.inTransit} raste mein · ${stats.atHub} head office par`} />
-        <StatCard label="Delivered Today" value={stats.deliveredToday} icon={CheckCircle2} tone="emerald" />
-        <StatCard label="Revenue (Charges)" value={money(stats.revenue)} icon={Wallet} tone="emerald" />
-        <StatCard label="Total COD Collected" value={money(stats.cod)} icon={Banknote} tone="indigo" />
-        <StatCard label="Paid to Companies" value={money(stats.paidOut)} icon={Truck} tone="sky" />
-        <StatCard label="Pending Requests" value={stats.pendingReqs.length} icon={HandCoins} tone="amber" hint={money(sum(stats.pendingReqs, 'amount'))} />
+        {cards.map((c, i) => (
+          <div key={c.label} className="fade-up" style={{ animationDelay: `${(i + 1) * 40}ms` }}>
+            <StatCard {...c} />
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Section title="Monthly Parcels" className="xl:col-span-2">
-          <ParcelsBarChart data={series} />
+      <div className="fade-up grid grid-cols-1 gap-6 xl:grid-cols-2" style={{ animationDelay: '380ms' }}>
+        <Section title="Customer Balances" action={viewAll}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4 font-medium">Customer</th>
+                  <th className="py-2 pr-4 text-right font-medium">Payable</th>
+                  <th className="py-2 pr-4 text-right font-medium">Paid</th>
+                  <th className="py-2 text-right font-medium">Pending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...balances]
+                  .sort((a, b) => b.pending - a.pending)
+                  .slice(0, 6)
+                  .map((b) => (
+                    <tr key={b.id}>
+                      <td className="py-2.5 pr-4 font-medium text-slate-800">{b.name}</td>
+                      <td className="whitespace-nowrap py-2.5 pr-4 text-right">{money(b.payable)}</td>
+                      <td className="whitespace-nowrap py-2.5 pr-4 text-right">{money(b.paid)}</td>
+                      <td className="whitespace-nowrap py-2.5 text-right font-semibold text-slate-900">{money(b.pending)}</td>
+                    </tr>
+                  ))}
+                {balances.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-slate-400">
+                      Abhi koi customer nahi
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Section>
-        <Section title="Delivery Status">
-          <StatusDonut counts={counts} />
-        </Section>
-      </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Section title="Revenue Trend" className="xl:col-span-2">
-          <RevenueAreaChart data={series} />
-        </Section>
-        <Section title="Top Companies">
-          <ul className="space-y-3">
-            {topCompanies.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-3 text-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-600">{c.name[0]}</div>
-                  <div>
-                    <p className="font-medium">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.city}</p>
-                  </div>
-                </div>
-                <span className="font-semibold">{c.parcels}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Section title="Recent Parcels" action={<Link to="/admin/parcels" className="text-sm text-indigo-600 hover:underline">View all</Link>}>
+        <Section title="Recent Payments" action={viewAll}>
           <ul className="divide-y divide-slate-100">
-            {parcels.slice(0, 6).map((p) => (
+            {payments.slice(0, 6).map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <div>
-                  <p className="font-mono font-medium text-indigo-600">{p.tracking_id}</p>
-                  <p className="text-xs text-slate-400">
-                    {companyMap[p.company_id]?.name} · {p.city}
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-800">{companyMap[p.company_id]?.name || '-'}</p>
+                  <p className="truncate text-xs text-slate-400">
+                    {date(p.created_at)} · {p.method}
                   </p>
                 </div>
-                <StatusBadge status={p.status} />
+                <span className="shrink-0 font-semibold text-slate-900">{money(p.amount)}</span>
               </li>
             ))}
+            {payments.length === 0 && <li className="py-8 text-center text-sm text-slate-400">Abhi koi payment nahi</li>}
           </ul>
         </Section>
-        <Section title="Payment Requests" action={<Link to="/admin/payment-requests" className="text-sm text-indigo-600 hover:underline">View all</Link>}>
+
+        <Section title="Recent Statements" action={viewAll} className="xl:col-span-2">
           <ul className="divide-y divide-slate-100">
-            {payment_requests.slice(0, 6).map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <div>
-                  <p className="font-medium">{companyMap[r.company_id]?.name}</p>
-                  <p className="text-xs text-slate-400">{date(r.created_at)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold">{money(r.amount)}</span>
-                  <StatusBadge status={r.status} />
-                </div>
-              </li>
-            ))}
+            {[...list]
+              .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+              .slice(0, 5)
+              .map((s) => (
+                <li key={s.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs text-indigo-600">{s.statement_number}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {companyMap[s.company_id]?.name || '-'} · {s.period_start} - {s.period_end}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-slate-900">{money(s.payable_total)}</span>
+                    <StatusBadge status={s.status || 'Pending'} />
+                  </div>
+                </li>
+              ))}
+            {statements && list.length === 0 && <li className="py-8 text-center text-sm text-slate-400">Abhi koi statement upload nahi hui</li>}
           </ul>
         </Section>
       </div>

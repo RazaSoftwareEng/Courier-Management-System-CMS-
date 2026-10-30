@@ -3,30 +3,11 @@ import { X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 
 const statusStyles = {
-  // parcel
-  Booked: 'bg-slate-100 text-slate-700',
-  Picked: 'bg-sky-100 text-sky-700',
-  'At Head Office': 'bg-violet-100 text-violet-700',
-  'Arrived at Destination': 'bg-cyan-100 text-cyan-700',
-  'In Transit': 'bg-indigo-100 text-indigo-700',
-  'Out for Delivery': 'bg-amber-100 text-amber-800',
-  Delivered: 'bg-emerald-100 text-emerald-700',
-  Returned: 'bg-orange-100 text-orange-700',
-  Cancelled: 'bg-rose-100 text-rose-700',
-  // requests / companies
+  // statements / companies
   Pending: 'bg-amber-100 text-amber-800',
-  Approved: 'bg-sky-100 text-sky-700',
   Paid: 'bg-emerald-100 text-emerald-700',
-  Rejected: 'bg-rose-100 text-rose-700',
   Active: 'bg-emerald-100 text-emerald-700',
   Suspended: 'bg-rose-100 text-rose-700',
-  Verified: 'bg-emerald-100 text-emerald-700',
-  Unverified: 'bg-slate-100 text-slate-600',
-  Inactive: 'bg-slate-100 text-slate-600',
-  // delivery type
-  Local: 'bg-slate-100 text-slate-700',
-  Domestic: 'bg-sky-100 text-sky-700',
-  International: 'bg-fuchsia-100 text-fuchsia-700',
 }
 
 export function StatusBadge({ status }) {
@@ -49,7 +30,7 @@ const tones = {
 
 export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint }) {
   return (
-    <div className="card min-w-0 p-4 sm:p-5">
+    <div className="card h-full min-w-0 p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm leading-snug text-slate-500">{label}</p>
         {Icon && (
@@ -93,7 +74,7 @@ export function Modal({ open, title, onClose, children, size = 'md' }) {
   }, [open, onClose])
 
   if (!open) return null
-  const width = { sm: 'sm:max-w-md', md: 'sm:max-w-xl', lg: 'sm:max-w-3xl' }[size]
+  const width = { sm: 'sm:max-w-md', md: 'sm:max-w-xl', lg: 'sm:max-w-3xl', xl: 'sm:max-w-6xl' }[size]
   // Mobile par neeche se khulne wali sheet, bari screen par beech mein; height screen se zyada nahi, andar scroll
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4" onMouseDown={onClose}>

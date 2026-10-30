@@ -73,11 +73,13 @@ async function readSheet(file, columns, sheetName) {
 // create(payload, onError) -> label (jaise tracking ID) ya null agar fail
 // saveAll(rows) -> [{ ok, label } | { ok: false, error }] har row ke liye (create ki jagah, ek saath save)
 // preview: [{ label, align?, render(row) }]  row = { raw, payload, errors }
+// saveTo: kis ke account mein save ho raha hai (Save button aur toast mein nazar aata hai)
+// onDone(savedCount, failedCount)
 // checkRows(rows) -> rows: poori file par check (jaise duplicate rows); summary(rows) -> preview ke upar note
 // validate warnings bhi de sakta hai: row save hoti hai, sirf woh field skip (orange note); errors wali row skip hoti hai
 const PREVIEW_LIMIT = 300
 
-export default function BulkImport({ noun, columns, sheetName, template, notes, validate, create, saveAll, preview, onDone, maxRows = MAX_ROWS, disabled, hint, disableSample, markRequired, checkRows, summary }) {
+export default function BulkImport({ noun, columns, sheetName, template, notes, validate, create, saveAll, preview, onDone, maxRows = MAX_ROWS, disabled, hint, disableSample, markRequired, checkRows, summary, saveTo }) {
   const { notify } = useStore()
   const inputRef = useRef(null)
   const [file, setFile] = useState(null)
@@ -128,8 +130,8 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
       ok = results.filter((r) => r.ok).length
       setRows((all) => all.map((r) => (byLine.has(r.line) ? { ...r, result: byLine.get(r.line) } : r)))
       setUploading(null)
-      notify(`${ok} ${noun} save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}${invalid ? `, ${invalid} skip` : ''}`, ok < queue.length ? 'error' : undefined)
-      if (ok && onDone) onDone(ok)
+      notify(`${ok} ${noun} ${saveTo ? `${saveTo} mein ` : ''}save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}${invalid ? `, ${invalid} skip` : ''}`, ok < queue.length ? 'error' : undefined)
+      if (ok && onDone) onDone(ok, queue.length - ok)
       return
     }
     for (const [i, row] of queue.entries()) {
@@ -141,7 +143,7 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
     }
     setUploading(null)
     notify(`${ok} ${noun} save ho gaye${ok < queue.length ? `, ${queue.length - ok} fail` : ''}${invalid ? `, ${invalid} skip` : ''}`, ok < queue.length ? 'error' : undefined)
-    if (ok && onDone) onDone(ok)
+    if (ok && onDone) onDone(ok, queue.length - ok)
   }
 
   const retrying = rows.some((r) => r.result && !r.result.ok)
@@ -212,7 +214,7 @@ export default function BulkImport({ noun, columns, sheetName, template, notes, 
               </button>
               <button className="btn-primary" onClick={upload} disabled={!valid.length || !!uploading}>
                 {uploading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-                {uploading ? `Saving ${uploading.done}/${uploading.total}...` : `${retrying ? 'Retry' : 'Save'} ${valid.length} ${noun}`}
+                {uploading ? `Saving ${uploading.done}/${uploading.total}...` : `${retrying ? 'Retry' : 'Save'} ${valid.length} ${noun}${saveTo ? ` to ${saveTo}` : ''}`}
               </button>
             </div>
           }

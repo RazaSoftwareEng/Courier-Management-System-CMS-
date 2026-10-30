@@ -4,7 +4,7 @@ import { Menu, LogOut, Truck, X, ChevronDown } from 'lucide-react'
 import { useStore } from '../store/StoreContext'
 import { Toast } from '../components/ui'
 
-// Sidebar themes: dark (admin/rider) aur light (company, seller-center style)
+// Sidebar themes: dark (admin) aur light (company, seller-center style)
 const themes = {
   dark: {
     shell: 'bg-slate-900 text-slate-300',
@@ -29,6 +29,16 @@ const themes = {
     footer: 'border-slate-200',
     logout: 'hover:bg-slate-50 hover:text-indigo-600',
   },
+}
+
+// Computer par sidebar band rakhne ki pasand (sirf is browser mein)
+const COLLAPSED_KEY = 'ccms-sidebar-closed'
+const loadCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 const linkClass = (fn) => ({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${fn(isActive)}`
@@ -66,8 +76,21 @@ function NavGroup({ item, theme, onNavigate }) {
 export default function DashboardLayout({ nav, title, userName, userRole, variant = 'dark' }) {
   const theme = themes[variant]
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(loadCollapsed)
   const { logout, settings } = useStore()
   const navigate = useNavigate()
+
+  // Mobile par overlay khulta hai, computer par sidebar band / khulta hai
+  const toggleSidebar = () => {
+    if (!window.matchMedia('(min-width: 1024px)').matches) return setOpen(true)
+    const next = !collapsed
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0')
+    } catch {
+      // storage blocked
+    }
+  }
 
   const sidebar = (
     <div className={`flex h-full flex-col ${theme.shell}`}>
@@ -109,7 +132,7 @@ export default function DashboardLayout({ nav, title, userName, userRole, varian
 
   return (
     <div className="min-h-screen">
-      <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">{sidebar}</aside>
+      <aside className={`no-print fixed inset-y-0 left-0 z-30 hidden w-64 transition-[transform,visibility] duration-300 ease-in-out lg:block ${collapsed ? 'invisible -translate-x-full' : ''}`}>{sidebar}</aside>
 
       {open && (
         <div className="no-print fixed inset-0 z-40 lg:hidden">
@@ -121,9 +144,9 @@ export default function DashboardLayout({ nav, title, userName, userRole, varian
         </div>
       )}
 
-      <div className="lg:pl-64">
+      <div className={`transition-[padding] duration-300 ease-in-out ${collapsed ? '' : 'lg:pl-64'}`}>
         <header className="no-print sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
-          <button className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(true)}>
+          <button className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100" title={collapsed ? 'Sidebar kholein' : 'Sidebar band karein'} aria-label="Toggle sidebar" onClick={toggleSidebar}>
             <Menu size={22} />
           </button>
           <div className="ml-auto flex items-center gap-3">

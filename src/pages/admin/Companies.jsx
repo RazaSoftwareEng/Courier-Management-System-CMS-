@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, Eye, Ban, CheckCircle } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import { COMPANY_STATUSES, CITIES } from '../../data/constants'
-import { date, money, countBy, companyLedger } from '../../lib/utils'
+import { date, money } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
 import EntityForm from '../../components/EntityForm'
 import { Modal, ConfirmDialog, PageHeader, IconButton, StatusBadge } from '../../components/ui'
@@ -22,13 +22,17 @@ const passwordField = { name: 'password', label: 'Login Password (kam az kam 6 c
 
 export default function Companies() {
   const store = useStore()
-  const { companies, parcels, customers, bank_accounts, add, update, removeCompany, createLogin, notify } = store
+  const { companies, payments, bank_accounts, add, update, removeCompany, createLogin, notify } = store
   const [form, setForm] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [deleting, setDeleting] = useState(null)
 
-  const parcelCount = useMemo(() => countBy(parcels, 'company_id'), [parcels])
-  const customerCount = useMemo(() => countBy(customers, 'company_id'), [customers])
+  // Har company ko ab tak ki gayi payment
+  const paidTo = useMemo(() => {
+    const out = {}
+    payments.forEach((p) => (out[p.company_id] = (out[p.company_id] || 0) + (Number(p.amount) || 0)))
+    return out
+  }, [payments])
 
   const columns = [
     {
@@ -44,8 +48,7 @@ export default function Companies() {
     { key: 'owner_name', label: 'Owner' },
     { key: 'phone', label: 'Phone' },
     { key: 'city', label: 'City' },
-    { key: 'parcels', label: 'Parcels', align: 'right', render: (c) => parcelCount[c.id] || 0, csv: (c) => parcelCount[c.id] || 0 },
-    { key: 'balance', label: 'Balance', align: 'right', render: (c) => money(companyLedger(c.id, store).available), csv: (c) => companyLedger(c.id, store).available },
+    { key: 'paid', label: 'Total Paid', align: 'right', render: (c) => money(paidTo[c.id]), csv: (c) => paidTo[c.id] || 0 },
     { key: 'status', label: 'Status', render: (c) => <StatusBadge status={c.status} /> },
     { key: 'created_at', label: 'Joined', render: (c) => date(c.created_at), csv: (c) => date(c.created_at) },
     {
@@ -70,14 +73,13 @@ export default function Companies() {
     if (await update('companies', c.id, { status })) notify(`${c.name}: ${status}`)
   }
 
-  const ledger = viewing && companyLedger(viewing.id, store)
   const bank = viewing && bank_accounts.find((b) => b.company_id === viewing.id)
 
   return (
     <div>
-      <PageHeader title="Companies" subtitle="Tamam registered courier companies">
+      <PageHeader title="Customer Profile" subtitle="Tamam customers (companies) ki profile aur login">
         <button className="btn-primary" onClick={() => setForm({})}>
-          <Plus size={16} /> Add Company
+          <Plus size={16} /> Add Customer
         </button>
       </PageHeader>
 
@@ -92,7 +94,7 @@ export default function Companies() {
         ]}
       />
 
-      <Modal open={!!form} title={form?.item ? 'Edit Company' : 'Add Company'} onClose={() => setForm(null)}>
+      <Modal open={!!form} title={form?.item ? 'Edit Customer' : 'Add Customer'} onClose={() => setForm(null)}>
         {form && (
           <EntityForm
             fields={form.item ? fields : [...fields, passwordField]}
@@ -101,15 +103,15 @@ export default function Companies() {
             onSubmit={async ({ password, ...v }) => {
               if (form.item) {
                 if (!(await update('companies', form.item.id, v))) return
-                notify('Company update ho gayi')
+                notify('Customer update ho gaya')
               } else {
                 const company = await add('companies', v)
                 if (!company) return
                 // Company pehle bani, phir login: profile trigger email se link kar deta hai
                 if (password && (await createLogin(v.email, password, v.owner_name))) {
-                  notify('Company aur uska login ban gaya')
+                  notify('Customer aur uska login ban gaya')
                 } else {
-                  notify('Company add ho gayi, lekin login nahi bana', 'error')
+                  notify('Customer add ho gaya, lekin login nahi bana', 'error')
                 }
               }
               setForm(null)
@@ -129,15 +131,7 @@ export default function Companies() {
               <Info label="City" value={viewing.city} />
               <Info label="Address" value={viewing.address} />
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Mini label="Parcels" value={parcelCount[viewing.id] || 0} />
-              <Mini label="Customers" value={customerCount[viewing.id] || 0} />
-              <Mini label="COD Collected" value={money(ledger.totalCod)} />
-              <Mini label="Charges" value={money(ledger.charges)} />
-              <Mini label="Paid Out" value={money(ledger.paid)} />
-              <Mini label="Pending Req." value={money(ledger.pending)} />
-              <Mini label="Available" value={money(ledger.available)} strong />
-            </div>
+            <Mini label="Total Paid" value={money(paidTo[viewing.id])} strong />
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="mb-2 font-semibold">Bank Account</p>
               {bank ? (
@@ -157,10 +151,10 @@ export default function Companies() {
 
       <ConfirmDialog
         open={!!deleting}
-        message={`${deleting?.name} aur iska saara data (parcels, customers, payments) delete ho jayega.`}
+        message={`${deleting?.name} aur iska saara data (statements, payments, bank details) delete ho jayega.`}
         onClose={() => setDeleting(null)}
         onConfirm={async () => {
-          if (await removeCompany(deleting.id)) notify('Company delete ho gayi')
+          if (await removeCompany(deleting.id)) notify('Customer delete ho gaya')
         }}
       />
     </div>

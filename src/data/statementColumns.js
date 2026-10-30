@@ -35,6 +35,7 @@ export const STATEMENT_COLUMNS = [
 ]
 
 export const EMPTY = 'N/A'
+const TOTAL_KEYS = ['cod_amount', 'payable_amount']
 
 export const LINE_COLUMNS = STATEMENT_COLUMNS.filter((c) => c.db !== false)
 export const FEE_KEYS = STATEMENT_COLUMNS.filter((c) => c.fee).map((c) => c.key)
@@ -51,7 +52,20 @@ export const toSheetRow = (line, statement) =>
 
 export async function downloadStatementSheet(statement, lines) {
   const XLSX = await import('xlsx')
-  const sheet = XLSX.utils.aoa_to_sheet([STATEMENT_COLUMNS.map((c) => c.label), ...lines.map((l) => toSheetRow(l, statement))])
+  const rows = [STATEMENT_COLUMNS.map((c) => c.label), ...lines.map((l) => toSheetRow(l, statement))]
+  const sheet = XLSX.utils.aoa_to_sheet(rows)
+  // Aakhri row: Total, COD aur Payable ka (SUM formula, taa ke rows badalne par khud update ho)
+  if (lines.length) {
+    const r = rows.length
+    XLSX.utils.sheet_add_aoa(sheet, [['Total']], { origin: { r, c: 0 } })
+    TOTAL_KEYS.forEach((key) => {
+      const c = STATEMENT_COLUMNS.findIndex((col) => col.key === key)
+      const col = XLSX.utils.encode_col(c)
+      const v = Math.round(lines.reduce((t, l) => t + (Number(l[key]) || 0), 0) * 100) / 100
+      sheet[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v, f: `SUM(${col}2:${col}${r})` }
+    })
+    sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: STATEMENT_COLUMNS.length - 1 } })
+  }
   sheet['!cols'] = STATEMENT_COLUMNS.map((c) => ({ wch: c.width }))
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, sheet, 'Statement')

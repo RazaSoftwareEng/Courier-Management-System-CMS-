@@ -2,8 +2,16 @@ import { useState } from 'react'
 import { Landmark, Pencil, Trash2, Plus } from 'lucide-react'
 import { useStore } from '../../store/StoreContext'
 import EntityForm from '../../components/EntityForm'
-import { PageHeader, Section, StatusBadge, ConfirmDialog } from '../../components/ui'
-import { bankFields } from '../admin/BankAccounts'
+import { PageHeader, Section, ConfirmDialog } from '../../components/ui'
+
+const BANKS = ['Meezan Bank', 'HBL', 'UBL', 'MCB Bank', 'Allied Bank', 'Bank Alfalah', 'Faysal Bank', 'Askari Bank', 'Standard Chartered']
+
+const bankFields = [
+  { name: 'bank_name', label: 'Bank Name', type: 'select', options: BANKS, required: true },
+  { name: 'account_title', label: 'Account Title', required: true, rule: 'name' },
+  { name: 'account_no', label: 'Account Number', required: true, rule: 'accountNo' },
+  { name: 'iban', label: 'IBAN', required: true, rule: 'iban' },
+]
 
 export default function CompanyBank() {
   const { session, bank_accounts, add, update, remove, notify } = useStore()
@@ -33,10 +41,9 @@ export default function CompanyBank() {
               initial={bank}
               onCancel={() => setEditing(false)}
               onSubmit={async (v) => {
-                // Details badalne par database verified ko false kar deta hai, admin dobara verify karega
                 const ok = bank ? await update('bank_accounts', bank.id, v) : await add('bank_accounts', { ...v, company_id: session.company_id })
                 if (!ok) return
-                notify('Bank details save ho gayin. Admin verify karega.')
+                notify('Bank details save ho gayin')
                 setEditing(false)
               }}
             />
@@ -64,16 +71,13 @@ export default function CompanyBank() {
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <StatusBadge status={bank.verified ? 'Verified' : 'Unverified'} />
-            <div className="flex gap-2">
-              <button className="btn-secondary" onClick={() => setEditing(true)}>
-                <Pencil size={16} /> Edit
-              </button>
-              <button className="btn-secondary text-rose-600" onClick={() => setDeleting(true)}>
-                <Trash2 size={16} /> Remove
-              </button>
-            </div>
+          <div className="flex justify-end gap-2 p-4">
+            <button className="btn-secondary" onClick={() => setEditing(true)}>
+              <Pencil size={16} /> Edit
+            </button>
+            <button className="btn-secondary text-rose-600" onClick={() => setDeleting(true)}>
+              <Trash2 size={16} /> Remove
+            </button>
           </div>
         </div>
       )}

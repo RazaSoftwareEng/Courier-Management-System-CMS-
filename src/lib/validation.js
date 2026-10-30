@@ -24,43 +24,6 @@ export const RULES = {
     pattern: /^03\d{9}$/,
     message: 'Mobile number 03XXXXXXXXX (11 digits)',
   },
-  // Bahar ke mulk ka number: + aur country code ke saath
-  intlPhone: {
-    maxLength: 20,
-    inputMode: 'tel',
-    placeholder: '+971501234567',
-    normalize: (v) => {
-      const d = v.replace(/[\s()-]/g, '')
-      return d.startsWith('00') ? '+' + d.slice(2) : d
-    },
-    pattern: /^\+\d{8,15}$/,
-    message: 'Number + aur country code ke saath, e.g. +971501234567',
-  },
-  landmark: { maxLength: 100, normalize: (v) => v.trim().replace(/\s+/g, ' ') },
-  fullAddress: {
-    maxLength: 250,
-    normalize: (v) => v.trim(),
-    pattern: /^[\s\S]{5,}$/,
-    message: 'Poora address likhein (kam az kam 5 characters)',
-  },
-  cnic: {
-    maxLength: 15,
-    inputMode: 'numeric',
-    placeholder: '35202-1234567-1',
-    normalize: (v) => {
-      const d = digits(v)
-      return d.length === 13 ? `${d.slice(0, 5)}-${d.slice(5, 12)}-${d.slice(12)}` : v.trim()
-    },
-    pattern: /^\d{5}-\d{7}-\d$/,
-    message: 'CNIC 13 digits: 35202-1234567-1',
-  },
-  vehicle: {
-    maxLength: 12,
-    placeholder: 'LEA-1234',
-    normalize: (v) => v.trim().toUpperCase().replace(/[\s-]+/g, '-'),
-    pattern: /^[A-Z]{2,4}-\d{2,4}(-\d{1,4})?$/,
-    message: 'Bike number: LEA-1234 ya LE-21-1234',
-  },
   iban: {
     maxLength: 30,
     placeholder: 'PK36MEZN0001234567890123',
@@ -108,9 +71,5 @@ export function checkNumber(raw, { min, max, label = 'Value', required = true } 
 
 // Numbers ki limits (database constraints ke mutabiq)
 export const LIMITS = {
-  weight: { min: 0.1, max: 100 },
-  cod: { min: 0, max: 1000000 },
-  charges: { min: 0, max: 50000 },
   amount: { min: 1, max: 10000000 },
-  commission: { min: 0, max: 100 },
 }

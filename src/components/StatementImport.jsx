@@ -115,7 +115,7 @@ function markDuplicates(rows) {
 }
 
 // File mein kaunsi statements hain, aur kaunsi pehle se upload ho chuki hain (replace hongi)
-function FileSummary({ rows, existing }) {
+function FileSummary({ rows, existing, company, companies }) {
   const groups = useMemo(() => {
     const m = new Map()
     rows.forEach((r) => {
@@ -127,14 +127,20 @@ function FileSummary({ rows, existing }) {
     })
     return [...m]
   }, [rows])
-  const byNumber = useMemo(() => Object.fromEntries((existing || []).map((s) => [s.statement_number, s])), [existing])
+  // existing: sab companies ki statements; same number doosri company mein ho to aksar ghalat company select hoti hai
+  const byNumber = useMemo(() => Object.fromEntries(existing.filter((s) => s.company_id === company.id).map((s) => [s.statement_number, s])), [existing, company.id])
+  const elsewhere = useMemo(() => Object.fromEntries(existing.filter((s) => s.company_id !== company.id).map((s) => [s.statement_number, s])), [existing, company.id])
 
   return (
     <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+      <p className="mb-2 flex items-center gap-2 font-medium text-slate-900">
+        <Building2 size={15} className="text-indigo-600" /> Ye file <span className="text-indigo-700">{company.name}</span> ke account mein save hogi
+      </p>
       <p className="mb-2 font-medium text-slate-700">File mein {groups.length} statement(s):</p>
       <ul className="space-y-1">
         {groups.map(([number, g]) => {
           const old = byNumber[number]
+          const other = elsewhere[number]
           return (
             <li key={number} className="flex flex-wrap items-center gap-x-2">
               <span className="font-mono text-xs text-indigo-600">{number}</span>
@@ -144,6 +150,11 @@ function FileSummary({ rows, existing }) {
               {old && (
                 <span className="inline-flex items-center gap-1 text-amber-700">
                   <AlertTriangle size={13} /> pehle se upload hai ({old.line_count} rows) — save karne par replace ho jayegi
+                </span>
+              )}
+              {other && (
+                <span className="inline-flex items-center gap-1 font-medium text-rose-700">
+                  <AlertTriangle size={13} /> ye statement {companies.find((c) => c.id === other.company_id)?.name || 'doosri company'} mein pehle se hai — company check karein
                 </span>
               )}
             </li>
@@ -157,9 +168,8 @@ function FileSummary({ rows, existing }) {
 export default function StatementImport({ companyId, onCompanyChange, onDone }) {
   const [existing, setExisting] = useState([])
   useEffect(() => {
-    setExisting([])
-    if (companyId) fetchStatements(companyId).then(setExisting).catch(() => {})
-  }, [companyId])
+    fetchStatements().then(setExisting).catch(() => {})
+  }, [])
 
   const { companies } = useStore()
   const company = companies.find((c) => c.id === companyId)
@@ -201,12 +211,13 @@ export default function StatementImport({ companyId, onCompanyChange, onDone }) 
         disableSample={!company}
         validate={validateLine}
         saveAll={(rows) => saveStatements(companyId, rows)}
+        saveTo={company?.name.trim()}
         preview={PREVIEW}
         checkRows={markDuplicates}
-        summary={(rows) => <FileSummary rows={rows} existing={existing} />}
-        onDone={(n) => {
-          fetchStatements(companyId).then(setExisting).catch(() => {})
-          onDone?.(n)
+        summary={(rows) => <FileSummary rows={rows} existing={existing} company={company} companies={companies} />}
+        onDone={(saved, failed) => {
+          fetchStatements().then(setExisting).catch(() => {})
+          onDone?.(saved, failed)
         }}
       />
     </div>

@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Search, CalendarDays, Copy, Download, FileText, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Copy, Download, FileText, ChevronDown, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStore, friendly } from '../../store/StoreContext'
-import { downloadCsv, byId, receiverOf } from '../../lib/utils'
-import { StatusBadge } from '../../components/ui'
+import { downloadCsv } from '../../lib/utils'
+import { Modal } from '../../components/ui'
+import StatementLines from '../../components/StatementLines'
 import { downloadStatementSheet } from '../../data/statementColumns'
 import { fetchStatements, fetchLines } from '../../lib/statements'
 import { supabase } from '../../lib/supabase'
@@ -17,38 +18,6 @@ const ALL_TYPES = 'All Statements'
 const pad = (n) => String(n).padStart(2, '0')
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const compact = (d) => ymd(d).replaceAll('-', '')
-const round2 = (n) => Math.round(n * 100) / 100
-
-// Parcel kab Delivered/Returned hua (history se, warna updated_at)
-const settledAt = (p) => new Date([...(p.history || [])].reverse().find((h) => h.status === p.status)?.at || p.updated_at || p.created_at)
-
-const weekStart = (d) => {
-  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  s.setDate(s.getDate() - ((s.getDay() + 6) % 7))
-  return s
-}
-
-function settledParcels(parcels, companyId, commissionRate) {
-  return parcels
-    .filter((p) => p.company_id === companyId && (p.status === 'Delivered' || p.status === 'Returned'))
-    .map((p) => {
-      const cod = p.status === 'Delivered' ? Number(p.cod_amount) || 0 : 0
-      const delivery = Number(p.delivery_charges) || 0
-      const commission = round2(cod * commissionRate)
-      const at = settledAt(p)
-      return {
-        ...p,
-        at,
-        cod,
-        delivery,
-        commission,
-        fees: round2(delivery + commission),
-        net: round2(cod - delivery - commission),
-      }
-    })
-    .sort((a, b) => b.at - a.at)
-}
-
 const uploadedStatement = (u) => ({
   id: `u-${u.id}`,
   uploadedId: u.id,
@@ -73,6 +42,7 @@ function payoutStatements(payments, companyId, since) {
       const amount = Number(p.amount) || 0
       const row = {
         id: `p-${p.id}`,
+        paymentId: p.id,
         type: STATEMENT_TYPES[1],
         start: ymd(prev && prev <= end ? prev : end),
         end: ymd(end),
@@ -210,48 +180,6 @@ function usePaged(rows) {
   }
 }
 
-// Statement download: har parcel ki ek row (seller-center statement jaisa format)
-const PROVINCES = {
-  Punjab: ['lahore', 'rawalpindi', 'faisalabad', 'multan', 'sialkot', 'gujranwala', 'bahawalpur', 'sargodha', 'sheikhupura', 'gujrat', 'sahiwal', 'okara', 'kasur'],
-  Sindh: ['karachi', 'hyderabad', 'sukkur', 'larkana', 'nawabshah', 'mirpur khas'],
-  'Khyber Pakhtunkhwa': ['peshawar', 'mardan', 'abbottabad', 'swat', 'kohat', 'dera ismail khan', 'mingora'],
-  Balochistan: ['quetta', 'gwadar', 'turbat', 'khuzdar'],
-  'Islamabad Capital Territory': ['islamabad'],
-  'Gilgit-Baltistan': ['gilgit', 'skardu'],
-  'Azad Kashmir': ['muzaffarabad', 'mirpur'],
-}
-const provinceOf = (p) => {
-  if (p.destination_country && p.destination_country !== 'Pakistan') return p.destination_country
-  const city = (p.city || '').trim().toLowerCase()
-  return Object.keys(PROVINCES).find((k) => PROVINCES[k].includes(city)) || ''
-}
-const dateTimeText = (iso) => (iso ? `${ymd(new Date(iso))} ${new Date(iso).toTimeString().slice(0, 5)}` : '')
-
-// Parcel -> statement line (payout statement download ke liye, uploaded lines jaisi shakal)
-const parcelToLine = (p, ctx) => ({
-  tracking_no: p.tracking_id,
-  original_tracking_no: p.tracking_id,
-  warehouse_name: ctx.warehouse,
-  order_type: p.delivery_type || 'Local',
-  order_no: p.id.slice(0, 8).toUpperCase(),
-  external_order_no: '',
-  order_created_at: dateTimeText(p.created_at),
-  final_status_at: dateTimeText(p.at),
-  buyer_name: receiverOf(p, ctx.customerMap).name,
-  buyer_phone: receiverOf(p, ctx.customerMap).phone,
-  buyer_province: provinceOf(p),
-  dead_weight: `${Number(p.weight) || 0}`,
-  billing_weight: `${Math.ceil(Number(p.weight) || 0)}`,
-  payment_method: Number(p.cod_amount) > 0 ? 'COD' : 'Prepaid',
-  final_status: p.status,
-  cod_amount: p.cod,
-  cod_surcharge_fee: p.commission,
-  shipping_fee: p.status === 'Delivered' ? p.delivery : 0,
-  return_shipping_fee: p.status === 'Returned' ? p.delivery : 0,
-  payable_amount: p.net,
-  note: p.description || '',
-})
-
 const statementColumns = [
   { key: 'period', label: 'Statement Period', csv: (r) => `${r.start} - ${r.end}` },
   { key: 'number', label: 'Statement No.' },
@@ -265,12 +193,9 @@ const statementColumns = [
 ]
 
 export default function CompanyStatements() {
-  const { session, companies, parcels, payments, customers, settings, notify } = useStore()
+  const { session, companies, payments, notify } = useStore()
   const company = companies.find((c) => c.id === session.company_id)
-  const customerMap = useMemo(() => byId(customers), [customers])
-  const commissionRate = (settings?.commission_percent || 0) / 100
 
-  const packages = useMemo(() => settledParcels(parcels, session.company_id, commissionRate), [parcels, session.company_id, commissionRate])
   const [uploaded, setUploaded] = useState([])
   // Admin nayi statement upload kare to page khud refresh ho (realtime + tab par wapis aane par)
   useEffect(() => {
@@ -292,12 +217,14 @@ export default function CompanyStatements() {
   }, [session.company_id, notify])
 
   const statements = useMemo(() => {
-    const since = packages.length ? weekStart(packages[packages.length - 1].at) : company?.created_at ? new Date(company.created_at) : null
-    return [...uploaded.map(uploadedStatement), ...payoutStatements(payments, session.company_id, since)]
-  }, [uploaded, packages, payments, session.company_id, company?.created_at])
+    const since = company?.created_at ? new Date(company.created_at) : null
+    // Jis payout se koi statement judi ho us ki detail bhi download ho sakti hai
+    const payouts = payoutStatements(payments, session.company_id, since).map((p) => ({ ...p, uploadedId: uploaded.find((u) => u.payment_id === p.paymentId)?.id }))
+    return [...uploaded.map(uploadedStatement), ...payouts]
+  }, [uploaded, payments, session.company_id, company?.created_at])
 
-  const [tab, setTab] = useState('statements')
   const [type, setType] = useState(ALL_TYPES)
+  const [viewing, setViewing] = useState(null)
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [from, setFrom] = useState('')
@@ -321,7 +248,6 @@ export default function CompanyStatements() {
     [statements, type, applied, from, to],
   )
   const { visible, pager } = usePaged(filtered)
-  const pkgPaged = usePaged(packages)
 
   useEffect(() => pager.setPage(1), [type, applied, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -334,13 +260,9 @@ export default function CompanyStatements() {
     }
   }
 
-  // Net-off: admin ki upload ki hui lines; Payout: payout period mein settle hue parcels
   const download = async (s) => {
     try {
-      if (s.uploadedId) return await downloadStatementSheet(s, await fetchLines(s.uploadedId))
-      const ctx = { customerMap, warehouse: `${settings?.hub_city || 'Lahore'} Head Office` }
-      const rows = packages.filter((p) => ymd(p.at) >= s.start && ymd(p.at) <= s.end).sort((a, b) => a.at - b.at)
-      await downloadStatementSheet(s, rows.map((p) => parcelToLine(p, ctx)))
+      await downloadStatementSheet(s, await fetchLines(s.uploadedId))
     } catch (e) {
       notify(friendly(e), 'error')
     }
@@ -352,27 +274,10 @@ export default function CompanyStatements() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-8 border-b border-slate-200">
-        {[
-          ['statements', 'Statement Overview'],
-          ['packages', 'Package Overview'],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`-mb-px border-b-4 px-1 pb-3 text-base transition ${tab === key ? 'border-indigo-600 font-semibold text-indigo-600' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'statements' ? (
-        <>
-          <div className="card flex flex-wrap items-center gap-3 p-4 sm:p-5">
-            <label className="flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm">
-              <span className="whitespace-nowrap text-slate-600">Statement Type:</span>
-              <select className="bg-transparent font-medium text-slate-900 outline-none" value={type} onChange={(e) => setType(e.target.value)}>
+          <div className="card grid grid-cols-1 items-end gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto]">
+            <label className="block min-w-0">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">Statement Type</span>
+              <select className="input h-10 font-medium text-slate-900" value={type} onChange={(e) => setType(e.target.value)}>
                 {[ALL_TYPES, ...STATEMENT_TYPES].map((t) => (
                   <option key={t} value={t}>
                     {t} ({typeCounts[t] || 0})
@@ -382,33 +287,34 @@ export default function CompanyStatements() {
             </label>
 
             <form
-              className="flex h-10 w-full items-center overflow-hidden rounded-md border border-slate-300 bg-white text-sm sm:w-auto"
+              className="min-w-0"
               onSubmit={(e) => {
                 e.preventDefault()
                 setApplied(query.trim())
               }}
             >
-              <span className="whitespace-nowrap pl-3 text-slate-600">Statement No.:</span>
-              <input className="min-w-0 flex-1 px-2 outline-none placeholder:text-slate-400" placeholder="Please Input" value={query} onChange={(e) => setQuery(e.target.value)} />
-              <button className="flex h-full items-center border-l border-slate-300 px-3 text-slate-500 hover:text-indigo-600">
-                <Search size={18} />
-              </button>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="statement-no">
+                Statement No.
+              </label>
+              <div className="relative">
+                <input id="statement-no" className="input h-10 pr-10" placeholder="Search number" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <button className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600" title="Search">
+                  <Search size={16} />
+                </button>
+              </div>
             </form>
 
-            <label className="flex h-10 w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm sm:w-auto">
-              <span className="whitespace-nowrap text-slate-600">Statement Period:</span>
-              <input type="date" className="min-w-0 bg-transparent text-slate-700 outline-none" value={from} onChange={(e) => setFrom(e.target.value)} />
-              <span className="text-slate-400">–</span>
-              <input type="date" className="min-w-0 bg-transparent text-slate-700 outline-none" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
-              <CalendarDays size={18} className="shrink-0 text-slate-400" />
-            </label>
+            <div className="min-w-0">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">Statement Period</span>
+              <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 text-sm transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100">
+                <input type="date" aria-label="From" className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <span className="text-slate-400">–</span>
+                <input type="date" aria-label="To" className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+              </div>
+            </div>
 
-            <button
-              className="btn-secondary h-10 lg:ml-auto"
-              disabled={filtered.length === 0}
-              onClick={() => downloadCsv('statement-history.csv', statementColumns, filtered)}
-            >
-              Export History
+            <button className="btn-secondary h-10 whitespace-nowrap" disabled={filtered.length === 0} onClick={() => downloadCsv('statement-history.csv', statementColumns, filtered)}>
+              <Download size={16} /> Export History
             </button>
           </div>
 
@@ -419,7 +325,7 @@ export default function CompanyStatements() {
                   <tr className="bg-slate-50 text-left font-semibold text-slate-700">
                     <th className="rounded-l-md px-4 py-3">Statement Period</th>
                     <th className="px-4 py-3">Statement No.</th>
-                    <th className="px-4 py-3 text-right">{isAll ? 'Amount' : isPayout ? 'Amount Paid' : 'Total Fees'}</th>
+                    <th className="px-4 py-3 text-right">{isAll ? 'Amount' : isPayout ? 'Amount Paid' : 'Payable Amount'}</th>
                     <th className="rounded-r-md px-4 py-3 text-center">Action</th>
                   </tr>
                 </thead>
@@ -450,18 +356,21 @@ export default function CompanyStatements() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3.5 text-right">
-                        <span className="text-slate-500">PKR</span> <span className="font-semibold text-slate-900">{pkr(s.fees)}</span>
-                        {isAll && <span className="block text-[11px] text-slate-400">{s.method ? 'Amount Paid' : 'Total Fees'}</span>}
+                        <span className="text-slate-500">PKR</span> <span className="font-semibold text-slate-900">{pkr(s.net)}</span>
+                        {isAll && <span className="block text-[11px] text-slate-400">{s.method ? 'Amount Paid' : 'Payable Amount'}</span>}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-center gap-4">
-                          <button
-                            className="text-indigo-600 hover:text-indigo-800"
-                            title="Download statement (Excel)"
-                            onClick={() => download(s)}
-                          >
-                            <Download size={16} />
-                          </button>
+                          {s.uploadedId && (
+                            <>
+                              <button className="text-indigo-600 hover:text-indigo-800" title="Rows dekhein" onClick={() => setViewing(s)}>
+                                <Eye size={16} />
+                              </button>
+                              <button className="text-indigo-600 hover:text-indigo-800" title="Download statement (Excel)" onClick={() => download(s)}>
+                                <Download size={16} />
+                              </button>
+                            </>
+                          )}
                           <button
                             className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
                             onClick={() => invoice(s)}
@@ -485,49 +394,10 @@ export default function CompanyStatements() {
             </div>
             <Pagination {...pager} />
           </div>
-        </>
-      ) : (
-        <div className="card p-4 sm:p-5">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-left font-semibold text-slate-700">
-                  <th className="rounded-l-md px-4 py-3">Tracking ID</th>
-                  <th className="px-4 py-3">Receiver</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3 text-right">COD</th>
-                  <th className="px-4 py-3 text-right">Fees</th>
-                  <th className="rounded-r-md px-4 py-3 text-right">Net</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pkgPaged.visible.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-4 py-3.5 font-mono font-medium text-indigo-600">{p.tracking_id}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{receiverOf(p, customerMap).name || '-'}</td>
-                    <td className="px-4 py-3.5">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-600">{ymd(p.at)}</td>
-                    <td className="px-4 py-3.5 text-right">PKR {pkr(p.cod)}</td>
-                    <td className="px-4 py-3.5 text-right text-rose-600">-{pkr(p.fees)}</td>
-                    <td className="px-4 py-3.5 text-right font-semibold">PKR {pkr(p.net)}</td>
-                  </tr>
-                ))}
-                {pkgPaged.visible.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-10 text-center text-slate-400">
-                      Abhi koi delivered/returned parcel nahi
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pagination {...pkgPaged.pager} />
-        </div>
-      )}
+
+      <Modal open={!!viewing} title={viewing?.number} onClose={() => setViewing(null)} size="xl">
+        {viewing && <StatementLines statementId={viewing.uploadedId} />}
+      </Modal>
     </div>
   )
 }

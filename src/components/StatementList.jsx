@@ -15,7 +15,8 @@ const METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'JazzCash', 'EasyPaisa']
 // refreshKey badalne par (e.g. upload ke baad) list dobara load hoti hai; realtime se bhi khud update.
 // onLoaded(list): parent ko statements (e.g. Payments page ka Statement Pending column)
 // Mark Paid: payment record banta hai (Add Payment jaisa) aur statement Paid ho jati hai
-export default function StatementList({ companyId, title = 'Uploaded Statements', refreshKey, onLoaded }) {
+// payRequest: bahar se (Payments list) Mark Paid kholna
+export default function StatementList({ companyId, title = 'Uploaded Statements', refreshKey, onLoaded, payRequest }) {
   const { companies, notify, add } = useStore()
   const [paying, setPaying] = useState(null)
   const [list, setList] = useState(null) // null = loading
@@ -38,6 +39,10 @@ export default function StatementList({ companyId, title = 'Uploaded Statements'
     setList(null)
     load()
   }, [load, refreshKey])
+
+  useEffect(() => {
+    if (payRequest) setPaying(payRequest)
+  }, [payRequest])
 
   useEffect(() => {
     const channel = supabase
@@ -131,9 +136,7 @@ export default function StatementList({ companyId, title = 'Uploaded Statements'
             submitLabel="Mark Paid"
             onCancel={() => setPaying(null)}
             onSubmit={async (v) => {
-              // Add Payment jaisa: pehle 'Paid' request, phir payment, phir statement Paid
-              const req = await add('payment_requests', { company_id: paying.company_id, amount: v.amount, status: 'Paid', admin_note: `Statement ${paying.statement_number}` })
-              const payment = req && (await add('payments', { company_id: paying.company_id, request_id: req.id, ...v }))
+              const payment = await add('payments', { company_id: paying.company_id, ...v })
               if (!payment) return
               try {
                 await markStatementPaid(paying.id, payment.id)
