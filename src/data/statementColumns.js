@@ -35,7 +35,6 @@ export const STATEMENT_COLUMNS = [
 ]
 
 export const EMPTY = 'N/A'
-const TOTAL_KEYS = ['cod_amount', 'payable_amount']
 
 export const LINE_COLUMNS = STATEMENT_COLUMNS.filter((c) => c.db !== false)
 export const FEE_KEYS = STATEMENT_COLUMNS.filter((c) => c.fee).map((c) => c.key)
@@ -50,22 +49,40 @@ export const toSheetRow = (line, statement) =>
     return v === null || v === undefined || String(v).trim() === '' ? EMPTY : v
   })
 
+// Total row: poori row highlight, amounts ke saath (left cell mein) label
+const TOTAL_LABELS = { cod_amount: 'Total COD', payable_amount: 'Total Payable' }
+const totalBorder = { style: 'medium', color: { rgb: '4F46E5' } }
+const totalStyle = (extra = {}) => ({
+  font: { bold: true, sz: 12, color: { rgb: '1E1B4B' } },
+  fill: { patternType: 'solid', fgColor: { rgb: 'E0E7FF' } },
+  border: { top: totalBorder, bottom: totalBorder },
+  alignment: { vertical: 'center', ...extra },
+})
+
+function addTotalRow(XLSX, sheet, lines, r) {
+  const last = STATEMENT_COLUMNS.length - 1
+  for (let c = 0; c <= last; c++) sheet[XLSX.utils.encode_cell({ r, c })] = { t: 's', v: '', s: totalStyle() }
+  sheet[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: 'Total', s: totalStyle() }
+
+  Object.entries(TOTAL_LABELS).forEach(([key, label]) => {
+    const c = STATEMENT_COLUMNS.findIndex((col) => col.key === key)
+    const col = XLSX.utils.encode_col(c)
+    const v = Math.round(lines.reduce((t, l) => t + (Number(l[key]) || 0), 0) * 100) / 100
+    sheet[XLSX.utils.encode_cell({ r, c: c - 1 })] = { t: 's', v: label, s: totalStyle({ horizontal: 'right' }) }
+    // SUM formula, taa ke rows badalne par total khud update ho
+    sheet[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v, f: `SUM(${col}2:${col}${r})`, z: '#,##0.00', s: { ...totalStyle({ horizontal: 'right' }), font: { bold: true, sz: 13, color: { rgb: '1E1B4B' } } } }
+  })
+  sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: last } })
+  sheet['!rows'] = [...Array(r).fill(undefined), { hpt: 24 }]
+}
+
 export async function downloadStatementSheet(statement, lines) {
-  const XLSX = await import('xlsx')
+  // xlsx-js-style: SheetJS jaisi hi, magar cell styling (bold, rang) bhi likhti hai
+  const lib = await import('xlsx-js-style')
+  const XLSX = lib.default || lib
   const rows = [STATEMENT_COLUMNS.map((c) => c.label), ...lines.map((l) => toSheetRow(l, statement))]
   const sheet = XLSX.utils.aoa_to_sheet(rows)
-  // Aakhri row: Total, COD aur Payable ka (SUM formula, taa ke rows badalne par khud update ho)
-  if (lines.length) {
-    const r = rows.length
-    XLSX.utils.sheet_add_aoa(sheet, [['Total']], { origin: { r, c: 0 } })
-    TOTAL_KEYS.forEach((key) => {
-      const c = STATEMENT_COLUMNS.findIndex((col) => col.key === key)
-      const col = XLSX.utils.encode_col(c)
-      const v = Math.round(lines.reduce((t, l) => t + (Number(l[key]) || 0), 0) * 100) / 100
-      sheet[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v, f: `SUM(${col}2:${col}${r})` }
-    })
-    sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: STATEMENT_COLUMNS.length - 1 } })
-  }
+  if (lines.length) addTotalRow(XLSX, sheet, lines, rows.length)
   sheet['!cols'] = STATEMENT_COLUMNS.map((c) => ({ wch: c.width }))
   const book = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(book, sheet, 'Statement')
